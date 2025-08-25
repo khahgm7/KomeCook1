@@ -1,0 +1,1545 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>GCRevalStandardCostContractService</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+class GCRevalStandardCostContractService extends SysOperationServiceBase
+{
+    
+
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>processType</Name>
+				<Source><![CDATA[
+    public void processType(GCRevalStandardCostContract _contract)
+    {
+        CostingVersion::updateLastUpdated(_contract.parmVersion());
+        if (_contract.parmMultiThreadSite())
+        {
+            this.processMultiSiteProduct(_contract);
+        }
+        else if (_contract.parmMultiThread())
+        {
+            this.processMulti(_contract);
+        }
+        else if (_contract.parmTopPicking())
+        {
+            if (BatchHeader::getCurrentBatchHeader())
+            {
+                this.cleanupTopPickingHistory();
+                if (_contract.parmTopPickingItem())
+                {
+                    this.processTopPickingItem(_contract);
+                }
+                else
+                {
+					this.processTopPicking(_contract);
+                }
+            }
+            else
+            {
+                warning("Top picking can only execute in batch.");
+            }
+        }
+        else
+        {
+            this.process(_contract);
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>process</Name>
+				<Source><![CDATA[
+    public void process(GCRevalStandardCostContract _contract)
+    {
+  
+        QueryRun						queryRun;
+        List							inventSiteList = new List(Types::String);
+        GCAllSites						allSites;
+        GCExcludeZeroCostSites          excludeZeroCostSites;
+        GCCreateHistoryRecord           createHistoryRecord;
+        Query							query;
+        InventTable						inventTable;
+        InventModelGroupItem			inventModelGroupItem;
+        InventItemGroupItem				inventItemGroupItem;
+        ListIterator					iterator;
+        InventSite						inventSite;
+        //InventDim						inventDim;
+        //GCItemPriceCalculation			priceCalculation = new GCItemPriceCalculation();
+        //UnitIDBase						unitId;
+        TransDate						calcDate;
+        CostingVersionId				versionId;
+        InventItemPriceSim				inventItemPriceSim;
+        //InventItemPriceActivationJob	inventItemPriceActivationJob;
+        int								processRecordCount;
+        container						inactivePriceList;
+        str								errorMessage;
+        NoYesId							useSystemDate;
+
+        query = _contract.getQuery();
+        inventSiteList = _contract.parmInventSite();
+        allSites = _contract.parmAllSites();
+        useSystemDate = _contract.parmUseSystemDate();
+        if (useSystemDate)
+        {
+            calcDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        }
+        else
+        {
+            calcDate = _contract.parmDate();
+        }
+        versionId = _contract.parmVersion();
+        excludeZeroCostSites = _contract.parmExcludeZeroCostSites();
+        createHistoryRecord  = _contract.parmcreateHistoryRecord();
+        if (_contract.validate() == false)
+        {
+            throw error(Error::wrongUseOfFunction(funcName()));
+        }
+
+        queryRun = new QueryRun(query);
+       
+        while (queryRun.next())
+        {
+            inventTable				=	queryRun.get(tableNum(InventTable));
+            inventModelGroupItem	=	queryRun.get(tableNum(InventModelGroupItem));
+            inventItemGroupItem		=	queryRun.get(tableNum(InventItemGroupItem));
+            
+            try
+            {
+                ttsbegin;
+                delete_from inventItemPriceSim
+                    where inventItemPriceSim.ItemId == inventTable.ItemId;
+                ttscommit;
+                //todo
+                if(this.checkMetalExists(inventTable.ItemId) && inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+                {
+                    if (!allSites)
+                    {
+                        if(!inventSiteList.empty())
+                        {
+                            iterator	=	new	ListIterator(inventSiteList);
+                            while(iterator.more())
+                            {
+                                select SiteId , GCZeroCostSite from inventSite where inventSite.SiteId == iterator.value();
+                                if( excludeZeroCostSites == true && inventSite.GCZeroCostSite == NoYes::Yes)
+                                {
+                                    continue;
+                                }
+
+                                this.processCalculation(inventSite.SiteId, inventTable.ItemId, calcDate, versionId, createHistoryRecord);
+                                iterator.next();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        InventSiteId					siteId;
+                        boolean							multiSite = false;
+                        boolean                         zeroCostSite = false;
+                        GCEcoResProductParameters		gcProductParameters = GCEcoResProductParameters::find();
+                        GCEcoResProductNPParameters		npParameters = GCEcoResProductNPParameters::find();
+
+                        if (EcoResProduct::find(inventTable.Product).ProductType == EcoResProductType::Service)
+                        {
+                            siteId = gcProductParameters.ServiceInventSiteId;
+                        }
+                        else if (inventTable.GCProductType == GCProductType::NP)
+                        {
+                            siteId = npParameters.InventSiteId;
+                        }
+                        else if (inventTable.GCProductType == GCProductType::Unallocated)
+                        {
+                            siteId = inventTable.GCAvailableForReconciliation == true ? gcProductParameters.MetalCreditsInventSiteId : gcProductParameters.UnallocatedInventSiteId;
+                        }
+                        else
+                        {
+                            multiSite = true;
+                        }
+
+                        if (multiSite)
+                        {
+                            /*
+                            while select  SiteId , GCZeroCostSite from inventSite
+                            {
+                                if (excludeZeroCostSites  && inventSite.GCZeroCostSite)
+                                {
+                                    continue;
+                                }
+                                else
+                                {
+                                    this.processCalculation(inventSite.SiteId, inventTable.ItemId, calcDate, versionId, createHistoryRecord);
+                                }
+                            }
+                            */
+                            //inventItemPriceSim	=	priceCalculation.InventoryRevalCalcforAllSite(false,excludeZeroCostSites,createHistoryRecord);
+                            this.processCalculationAllSite(inventTable.ItemId, calcDate, versionId, createHistoryRecord, excludeZeroCostSites);
+                        }
+                        else
+                        {
+                            if (excludeZeroCostSites  && inventSite::find(siteId).GCZeroCostSite)
+                            {
+                                zeroCostSite = true;
+                            }
+                            if (!zeroCostSite)
+                            {
+                                this.processCalculation(siteId, inventTable.ItemId, calcDate, versionId, createHistoryRecord);
+                            }
+                        }
+                        /*
+                        if( excludeZeroCostSites == true  && inventSite::find(siteId).GCZeroCostSite == true)
+                        {
+                            zeroCostSiteCheck = false ;
+                        }
+                        if (!multiSite)
+                        {
+                            if(zeroCostSiteCheck)
+                            {
+                                priceCalculation.parmItemId(inventTable.itemId);
+                                unitId	=	InventTableModule::find(inventTable.ItemId,ModuleInventPurchSales::Invent).UnitId;
+                                priceCalculation.parmUnitId(unitId);
+                                priceCalculation.parmcalculationDate(calcDate);
+                                priceCalculation.parmVersionId(versionId);
+                                priceCalculation.parmInventSiteId(siteId);
+                                priceCalculation.parmInventQty(this.quantity(inventTable.ItemId));
+                                //priceCalculation.parmCostingVersion(costingVersion);
+                                inventItemPriceSim	=	priceCalculation.InventoryRevalCalc(false,createHistoryRecord);
+                                if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+                                {
+                                    inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+                                    inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+                                }
+                            }
+                        }
+                        else if(zeroCostSiteCheck)
+                        {
+                            priceCalculation.parmItemId(inventTable.itemId);
+                            unitId	=	InventTableModule::find(inventTable.ItemId,ModuleInventPurchSales::Invent).UnitId;
+                            priceCalculation.parmUnitId(unitId);
+                            priceCalculation.parmcalculationDate(calcDate);
+                            priceCalculation.parmVersionId(versionId);
+                            //priceCalculation.parmInventSiteId(inventSiteLocal.SiteId);
+                            priceCalculation.parmInventQty(this.quantity(inventTable.ItemId));
+                            //priceCalculation.parmCostingVersion(costingVersion);
+                            inventItemPriceSim	=	priceCalculation.InventoryRevalCalcforAllSite(false,excludeZeroCostSites,createHistoryRecord);
+                        }
+                        */
+                    }
+                    processRecordCount++;
+                }
+            }
+            catch
+            {
+                str		inactiveRecord	=	strFmt("Item number: %1,Item group: %2,Item model group: %3, Reason for failure: %4 <br>"
+                                                            ,inventTable.ItemId
+                                                            ,inventItemGroupItem.ItemGroupId
+                                                            ,inventModelGroupItem.ModelGroupId
+                                                            ,this.getTextFromInfoLog());
+                inactivePriceList	+=	inactiveRecord;
+            }
+        }
+        errorMessage	=	con2Str(inactivePriceList);
+        if(errorMessage)
+        {
+            this.sendErrorEmail(errorMessage);
+            info(strFmt("Revaluation for metal cost batch run was unsuccessful - %1",errorMessage));
+        }
+        else if(processRecordCount > 0)
+        {
+            info("Revaluation for metal cost batch run was successful");
+        }
+        else
+        {
+            info("No record has been processed.");
+        }
+           
+               
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processMultiSiteProduct</Name>
+				<Source><![CDATA[
+    private void processMultiSiteProduct(GCRevalStandardCostContract _contract)
+    {
+        container                                   packedQuery = SysOperationHelper::base64Decode(_contract.parmQuery());
+        Query                                       query = new Query(packedQuery);
+        QueryRun                                    queryRun;
+        BatchHeader                                 batchHeader;
+        Query                                       taskQuery;
+        InventTable									inventTable;
+        SysOperationServiceController				prevItemThread;
+
+        queryRun = new QueryRun(query);
+        while (queryRun.next())
+        {
+            // Get the current contract record
+            if (queryRun.changed(tableNum(InventTable)))
+            {
+                inventTable = queryRun.get(tableNum(InventTable));
+                // If we do not have a batch header yet
+                if(!batchHeader)
+                {
+                    batchHeader = BatchHeader::getCurrentBatchHeader();
+                }
+                // create query for task / thread per contract
+                taskQuery = new Query(packedQuery);
+                SysQuery::findOrCreateRange( taskQuery.dataSourceTable(tableNum(InventTable)), fieldNum(InventTable, ItemId)).value(queryValue(inventTable.ItemId));
+                
+                prevItemThread = this.createTask(batchHeader,
+                                                taskQuery,
+                                                _contract.parmVersion(),
+                                                _contract.parmAllSites(),
+                                                _contract.parmDate(),
+                                                _contract.parmInventSite(),
+                                                _contract.parmcreateHistoryRecord(),
+                                                _contract.parmExcludeZeroCostSites(),
+                                                _contract.parmUseSystemDate(),
+                                                strFmt("Item thread - %1", inventTable.ItemId),
+                                                methodStr(GCRevalStandardCostContractService, processMultiSite));//,
+                //prevItemThread);
+            }
+        }
+        // After all of the runtime tasks are created, save thebatchheader
+        if(batchHeader)
+        {
+            // Saving the header will create the batch records and adddependencies where needed
+            batchHeader.save();
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processMulti</Name>
+				<Source><![CDATA[
+    private void processMulti(GCRevalStandardCostContract _contract)
+    {
+        container                                   packedQuery = SysOperationHelper::base64Decode(_contract.parmQuery());
+        Query                                       query = new Query(packedQuery);
+        QueryRun                                    queryRun;
+        BatchHeader                                 batchHeader;
+        Query                                       taskQuery;
+        InventTable									inventTable;
+
+        queryRun = new QueryRun(query);
+        while (queryRun.next())
+        {
+            // Get the current contract record
+            if (queryRun.changed(tableNum(InventTable)))
+            {
+                inventTable = queryRun.get(tableNum(InventTable));
+                // If we do not have a batch header yet
+                if(!batchHeader)
+                {
+                    batchHeader = BatchHeader::getCurrentBatchHeader();
+                }
+                // create query for task / thread per contract
+                taskQuery = new Query(packedQuery);
+                SysQuery::findOrCreateRange( taskQuery.dataSourceTable(tableNum(InventTable)), fieldNum(InventTable, ItemId)).value(queryValue(inventTable.ItemId));
+
+                this.createTask(batchHeader,
+                            taskQuery,
+                    _contract.parmVersion(),
+                    _contract.parmAllSites(),
+                    _contract.parmDate(),
+                    _contract.parmInventSite(),
+                    _contract.parmcreateHistoryRecord(),
+                    _contract.parmExcludeZeroCostSites(),
+                    _contract.parmUseSystemDate(),
+                    strFmt("Revaluation for metal costs - %1", inventTable.ItemId),
+                    methodStr(GCRevalStandardCostContractService, process));
+            }
+        }
+        // After all of the runtime tasks are created, save thebatchheader
+        if(batchHeader)
+        {
+            // Saving the header will create the batch records and adddependencies where needed
+            batchHeader.save();
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processSite</Name>
+				<Source><![CDATA[
+    public void processSite(GCRevalStandardCostContract _contract)
+    {
+  
+        QueryRun						queryRun;
+        InventTable						inventTable;
+        str								errorMessage;
+        List							inventSite = new List(Types::String);
+        ListIterator					iterator;
+        InventSiteId					inventSiteId;
+        #OCCRetryCount
+
+        queryRun = new QueryRun(_contract.getQuery());
+       
+        while (queryRun.next())
+        {
+            inventTable	=	queryRun.get(tableNum(InventTable));
+            inventSiteId = '';
+            try
+            {
+                inventSite = _contract.parmInventSite();
+                ttsbegin;
+                //inventSite = _contract.parmInventSite();
+                if(!inventSite.empty())
+                {
+                    iterator	=	new	ListIterator(inventSite);
+                    while(iterator.more())
+                    {
+                        inventSiteId = iterator.value();
+                        this.processCalculation(iterator.value(), inventTable.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                        
+                        iterator.next();
+                    }
+                }
+                ttscommit;
+            }
+            catch (Exception::Deadlock)
+            {
+                infolog.clear();
+                retry;
+            }
+            catch (Exception::UpdateConflict)
+            {
+                if (appl.ttsLevel() == 0)
+                {
+                    if (xSession::currentRetryCount() >= #RetryNum)
+                    {
+                        errorMessage	=	strFmt("Item number: %1, Site %2, Reason for failure: %3 <br>"
+                                                            ,inventTable.ItemId
+                                                            ,inventSiteId
+                                                            ,this.getTextFromInfoLog());
+                        this.sendErrorEmail(errorMessage);
+                        info(strFmt("Revaluation for metal cost batch run was unsuccessful - %1",errorMessage));
+                    }
+                    else
+                    {
+                        infolog.clear();
+                        retry;
+                    }
+                }
+                else
+                {
+                    errorMessage	=	strFmt("Item number: %1, Site %2, Reason for failure: %3 <br>"
+                                                            ,inventTable.ItemId
+                                                            ,inventSiteId
+                                                            ,this.getTextFromInfoLog());
+                    this.sendErrorEmail(errorMessage);
+                    info(strFmt("Revaluation for metal cost batch run was unsuccessful - %1",errorMessage));
+                }
+            }
+            catch
+            {
+                if (xSession::currentRetryCount() >= 1)
+                {
+                    errorMessage	=	strFmt("Item number: %1, Site %2, Reason for failure: %3 <br>"
+                                                            ,inventTable.ItemId
+                                                            ,inventSiteId
+                                                            ,this.getTextFromInfoLog());
+                    this.sendErrorEmail(errorMessage);
+                    info(strFmt("Revaluation for metal cost batch run was unsuccessful - %1",errorMessage));
+                }
+                else
+                {
+                    infolog.clear();
+                    retry;
+                }
+            }
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processSiteTopPicking</Name>
+				<Source><![CDATA[
+    public void processSiteTopPicking(GCRevalStandardCostContract _contract)
+    {
+        BatchHeader						batchHeader = BatchHeader::getCurrentBatchHeader();
+        str								errorMessage;
+        GCRevalTopPicking				gcRevalTopPicking;
+        GCRevalTopPickingRetry			gcRevalTopPickingRetryCount,
+                                        gcRevalTopPickingRetry;
+        #OCCRetryCount
+
+        gcRevalTopPicking.readPast(true);
+        do
+        {
+            try
+            {
+                ttsBegin;
+                // when it finds no more work item to process do-while loop will exit
+                select pessimisticlock firstOnly * from gcRevalTopPicking
+                    //where gcRevalTopPicking.BatchHeaderId == batchHeader.parmBatchHeaderId()
+                    where gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId == _contract.parmGCRevalTopPickingHeaderRecId()
+                        && gcRevalTopPicking.Processed == NoYes::No;
+
+                select count(RecId) from gcRevalTopPickingRetryCount
+                    where gcRevalTopPickingRetryCount.GCRevalTopPickingRefRecId == gcRevalTopPicking.RecId;
+                if (gcRevalTopPickingRetryCount.RecId >= 5)
+                {
+                    gcRevalTopPicking.Processed = NoYes::Yes;
+                    gcRevalTopPicking.Error = NoYes::Yes;
+                    //gcRevalTopPicking.ErrorMessage = gcRevalTopPickingRetry.ErrorMessage;
+                    gcRevalTopPicking.update();
+                }
+                else
+                {
+                    if (gcRevalTopPicking.ItemId && gcRevalTopPicking.InventSiteId)
+                    {
+                        this.processCalculation(gcRevalTopPicking.InventSiteId, gcRevalTopPicking.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                    }
+                    if(gcRevalTopPicking)
+                    {
+                        gcRevalTopPicking.Processed = NoYes::Yes;
+                        gcRevalTopPicking.update();
+                    }
+                }
+                ttsCommit;
+            }
+            catch (Exception::Deadlock)
+            {
+                this.processRetry(gcRevalTopPicking);
+            }
+            catch (Exception::UpdateConflict)
+            {
+                this.processRetry(gcRevalTopPicking);
+            }
+            catch
+            {
+                this.processRetry(gcRevalTopPicking);
+            }
+        }
+        while (gcRevalTopPicking);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processMultiSite</Name>
+				<Source><![CDATA[
+    private void processMultiSite(GCRevalStandardCostContract _contract)
+    {
+        container                                   packedQuery = SysOperationHelper::base64Decode(_contract.parmQuery());
+        Query                                       query = new Query(packedQuery);
+        QueryRun                                    queryRun;
+        BatchHeader                                 batchHeader;
+        Query                                       taskQuery;
+        InventTable									inventTable;
+        InventModelGroupItem						inventModelGroupItem;
+        InventItemGroupItem							inventItemGroupItem;
+        GCEcoResProductParameters					gcProductParameters = GCEcoResProductParameters::find();
+        GCEcoResProductNPParameters					npParameters = GCEcoResProductNPParameters::find();
+        TransDate									calcDate;
+        InventSite									inventSiteLocal;
+        List										inventSite;
+        List										inventSiteNew = new List(Types::String);
+        ListIterator								iterator;
+        InventItemPriceSim							inventItemPriceSim;
+        InventSiteId								inventSiteId;
+
+        if (_contract.parmUseSystemDate())
+        {
+            calcDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        }
+        else
+        {
+            calcDate = _contract.parmDate();
+        }
+
+        queryRun = new QueryRun(query);
+        while (queryRun.next())
+        {
+            if (queryRun.changed(tableNum(InventTable)))
+            {
+                inventTable = queryRun.get(tableNum(InventTable));
+                inventModelGroupItem	=	queryRun.get(tableNum(InventModelGroupItem));
+                //inventItemGroupItem		=	queryRun.get(tableNum(InventItemGroupItem)); GC_59519 commented out
+                inventSite = new List(Types::String);
+                taskQuery = new Query(packedQuery);
+
+                ttsbegin;
+                delete_from inventItemPriceSim
+                    where inventItemPriceSim.ItemId == inventTable.ItemId;
+                ttscommit;                
+                
+                // If we do not have a batch header yet
+                if(!batchHeader)
+                {
+                    batchHeader = BatchHeader::getCurrentBatchHeader();
+                }
+                /* GC_59519 Test logic */
+                while select InventTable
+                    where InventTable.GCProductType == GCProductType::Unallocated
+                {
+                    if(this.checkMetalExists(inventTable.ItemId) && inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+                    {
+                        if (_contract.parmAllSites() == NoYes::Yes)
+                        {
+                            inventSiteId = inventTable.GCAvailableForReconciliation == true ? gcProductParameters.MetalCreditsInventSiteId : gcProductParameters.UnallocatedInventSiteId;
+                            if (inventSiteId)
+                            {
+                                inventSiteNew = new List(Types::String);
+                                inventSiteNew.addEnd(inventSiteId);
+                                this.createTask(batchHeader,
+                                                    taskQuery,
+                                                    _contract.parmVersion(),
+                                                    NoYes::No,
+                                                    calcDate,
+                                                    inventSiteNew,
+                                                    _contract.parmcreateHistoryRecord(),
+                                                    _contract.parmExcludeZeroCostSites(),
+                                                    _contract.parmUseSystemDate(),
+                                                    strFmt("Revaluation for metal costs - %1, Site %2", inventTable.ItemId, inventSiteLocal.SiteId),
+                                                    methodStr(GCRevalStandardCostContractService, processSite));
+                            }
+                        }
+                    }
+                }
+    
+                SysQuery::findOrCreateRange( taskQuery.dataSourceTable(tableNum(InventTable)), fieldNum(InventTable, ItemId)).value(queryValue(inventTable.ItemId));                           
+                
+                
+                if(this.checkMetalExists(inventTable.ItemId) && inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+                {
+                    if (_contract.parmAllSites() == NoYes::Yes)
+                    {
+                        if (EcoResProduct::find(inventTable.Product).ProductType == EcoResProductType::Service)
+                        {
+                            if (gcProductParameters.ServiceInventSiteId)
+                            {
+                                inventSiteNew = new List(Types::String);
+                                inventSiteNew.addEnd(gcProductParameters.ServiceInventSiteId);
+                                this.createTask(batchHeader,
+                                                    taskQuery,
+                                                    _contract.parmVersion(),
+                                                    NoYes::No,
+                                                    calcDate,
+                                                    inventSiteNew,
+                                                    _contract.parmcreateHistoryRecord(),
+                                                    _contract.parmExcludeZeroCostSites(),
+                                                    _contract.parmUseSystemDate(),
+                                                    strFmt("Revaluation for metal costs - %1, Site %2", inventTable.ItemId, inventSiteLocal.SiteId),
+                                                    methodStr(GCRevalStandardCostContractService, processSite));
+                            }
+                        }
+                        else if (inventTable.GCProductType == GCProductType::NP)
+                        {
+                            if (npParameters.InventSiteId)
+                            {
+                                inventSiteNew = new List(Types::String);
+                                inventSiteNew.addEnd(npParameters.InventSiteId);
+                                this.createTask(batchHeader,
+                                                    taskQuery,
+                                                    _contract.parmVersion(),
+                                                    NoYes::No,
+                                                    calcDate,
+                                                    inventSiteNew,
+                                                    _contract.parmcreateHistoryRecord(),
+                                                    _contract.parmExcludeZeroCostSites(),
+                                                    _contract.parmUseSystemDate(),
+                                                    strFmt("Revaluation for metal costs - %1, Site %2", inventTable.ItemId, inventSiteLocal.SiteId),
+                                                    methodStr(GCRevalStandardCostContractService, processSite));
+                            }
+                        }    /*  
+                        else if (inventTable.GCProductType == GCProductType::Unallocated)
+                        {
+                            inventSiteId = inventTable.GCAvailableForReconciliation == true ? gcProductParameters.MetalCreditsInventSiteId : gcProductParameters.UnallocatedInventSiteId;
+                            if (inventSiteId)
+                            {
+                                inventSiteNew = new List(Types::String);
+                                inventSiteNew.addEnd(inventSiteId);
+                                this.createTask(batchHeader,
+                                                    taskQuery,
+                                                    _contract.parmVersion(),
+                                                    NoYes::No,
+                                                    calcDate,
+                                                    inventSiteNew,
+                                                    _contract.parmcreateHistoryRecord(),
+                                                    _contract.parmExcludeZeroCostSites(),
+                                                    _contract.parmUseSystemDate(),
+                                                    strFmt("Revaluation for metal costs - %1, Site %2", inventTable.ItemId, inventSiteLocal.SiteId),
+                                                    methodStr(GCRevalStandardCostContractService, processSite));
+                            }
+                        }*/
+                        else
+                        {
+                            while select inventSiteLocal
+                                where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+                                    && inventSiteLocal.SiteId != npParameters.InventSiteId
+                                    && inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+                                    && inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+                            {
+                                if (_contract.parmExcludeZeroCostSites() && inventSiteLocal.GCZeroCostSite == NoYes::No ||
+                                    !_contract.parmExcludeZeroCostSites())
+                                {
+                                    inventSiteNew = new List(Types::String);
+                                    inventSiteNew.addEnd(inventSiteLocal.SiteId);
+                                    this.createTask(batchHeader,
+                                                    taskQuery,
+                                                    _contract.parmVersion(),
+                                                    NoYes::No,
+                                                    calcDate,
+                                                    inventSiteNew,
+                                                    _contract.parmcreateHistoryRecord(),
+                                                    _contract.parmExcludeZeroCostSites(),
+                                                    _contract.parmUseSystemDate(),
+                                                    strFmt("Revaluation for metal costs - %1, Site %2", inventTable.ItemId, inventSiteLocal.SiteId),
+                                                    methodStr(GCRevalStandardCostContractService, processSite));
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        inventSite = _contract.parmInventSite();
+                        if(!inventSite.empty())
+                        {
+                            iterator	=	new	ListIterator(inventSite);
+                            while(iterator.more())
+                            {
+                                select SiteId , GCZeroCostSite from inventSiteLocal where inventSiteLocal.SiteId == iterator.value();
+                                if(_contract.parmExcludeZeroCostSites() && inventSiteLocal.GCZeroCostSite == NoYes::Yes ||
+                                    !_contract.parmExcludeZeroCostSites())
+                                {
+                                    inventSiteNew = new List(Types::String);
+                                    inventSiteNew.addEnd(inventSiteLocal.SiteId);
+                                    this.createTask(batchHeader,
+                                                    taskQuery,
+                                                    _contract.parmVersion(),
+                                                    NoYes::No,
+                                                    calcDate,
+                                                    inventSiteNew,
+                                                    _contract.parmcreateHistoryRecord(),
+                                                    _contract.parmExcludeZeroCostSites(),
+                                                    _contract.parmUseSystemDate(),
+                                                    strFmt("Revaluation for metal costs - %1, Site %2", inventTable.ItemId, inventSiteLocal.SiteId),
+                                                    methodStr(GCRevalStandardCostContractService, processSite));
+                                }
+                                iterator.next();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // After all of the runtime tasks are created, save thebatchheader
+        if(batchHeader)
+        {
+            // Saving the header will create the batch records and adddependencies where needed
+            batchHeader.save();
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processTopPicking</Name>
+				<Source><![CDATA[
+    private void processTopPicking(GCRevalStandardCostContract _contract)
+    {
+        container                                   packedQuery = SysOperationHelper::base64Decode(_contract.parmQuery());
+        Query                                       query = new Query(packedQuery);
+        QueryRun                                    queryRun;
+        BatchHeader                                 batchHeader;
+        //Query                                       taskQuery;
+        InventTable									inventTable;
+        InventModelGroupItem						inventModelGroupItem;
+        InventItemGroupItem							inventItemGroupItem;
+        GCEcoResProductParameters					gcProductParameters = GCEcoResProductParameters::find();
+        GCEcoResProductNPParameters					npParameters = GCEcoResProductNPParameters::find();
+        TransDate									calcDate;
+        InventSite									inventSiteLocal;
+        List										inventSite;
+        List										inventSiteNew = new List(Types::String);
+        ListIterator								iterator;
+        InventItemPriceSim							inventItemPriceSim;
+        InventSiteId								inventSiteId;
+        GCRevalTopPickingHeader						gcRevalTopPickingHeader;
+        GCRevalTopPicking							gcRevalTopPicking;
+        Counter										counter;
+        SysOperationServiceController				completedTask;
+
+        if (_contract.parmUseSystemDate())
+        {
+            calcDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        }
+        else
+        {
+            calcDate = _contract.parmDate();
+        }
+        batchHeader = BatchHeader::getCurrentBatchHeader();
+
+        ttsbegin;
+        gcRevalTopPickingHeader.BatchHeaderId = batchHeader.parmBatchHeaderId();
+        gcRevalTopPickingHeader.StartDateTime = DateTimeUtil::getSystemDateTime();
+        gcRevalTopPickingHeader.BatchCaption = batchHeader.parmCaption();
+        gcRevalTopPickingHeader.insert();
+        ttscommit;
+
+        queryRun = new QueryRun(query);
+        while (queryRun.next())
+        {
+            if (queryRun.changed(tableNum(InventTable)))
+            {
+                inventTable = queryRun.get(tableNum(InventTable));
+                inventModelGroupItem	=	queryRun.get(tableNum(InventModelGroupItem));
+                inventItemGroupItem		=	queryRun.get(tableNum(InventItemGroupItem));
+                inventSite = new List(Types::String);
+                
+
+                ttsbegin;
+                delete_from inventItemPriceSim
+                    where inventItemPriceSim.ItemId == inventTable.ItemId;
+                ttscommit;
+
+                // If we do not have a batch header yet
+                if(!batchHeader)
+                {
+                    batchHeader = BatchHeader::getCurrentBatchHeader();
+                }
+                if(this.checkMetalExists(inventTable.ItemId) && inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+                {
+                    if (_contract.parmAllSites() == NoYes::Yes)
+                    {
+                        if (EcoResProduct::find(inventTable.Product).ProductType == EcoResProductType::Service)
+                        {
+                            if (gcProductParameters.ServiceInventSiteId)
+                            {
+                                gcRevalTopPicking.clear();
+                                //gcRevalTopPicking.BatchHeaderId = batchHeader.parmBatchHeaderId();
+                                gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId = gcRevalTopPickingHeader.RecId;
+                                gcRevalTopPicking.Processed = NoYes::No;
+                                gcRevalTopPicking.ItemId = inventTable.ItemId;
+                                gcRevalTopPicking.InventSiteId = gcProductParameters.ServiceInventSiteId;
+                                gcRevalTopPicking.insert();
+                            }
+                        }
+                        else if (inventTable.GCProductType == GCProductType::NP)
+                        {
+                            if (npParameters.InventSiteId)
+                            {
+                                gcRevalTopPicking.clear();
+                                //gcRevalTopPicking.BatchHeaderId = batchHeader.parmBatchHeaderId();
+                                gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId = gcRevalTopPickingHeader.RecId;
+                                gcRevalTopPicking.Processed = NoYes::No;
+                                gcRevalTopPicking.ItemId = inventTable.ItemId;
+                                gcRevalTopPicking.InventSiteId = npParameters.InventSiteId;
+                                gcRevalTopPicking.insert();
+                            }
+                        }
+                        else if (inventTable.GCProductType == GCProductType::Unallocated)
+                        {
+                            inventSiteId = inventTable.GCAvailableForReconciliation == true ? gcProductParameters.MetalCreditsInventSiteId : gcProductParameters.UnallocatedInventSiteId;
+                            if (inventSiteId)
+                            {
+                                gcRevalTopPicking.clear();
+                                //gcRevalTopPicking.BatchHeaderId = batchHeader.parmBatchHeaderId();
+                                gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId = gcRevalTopPickingHeader.RecId;
+                                gcRevalTopPicking.Processed = NoYes::No;
+                                gcRevalTopPicking.ItemId = inventTable.ItemId;
+                                gcRevalTopPicking.InventSiteId = inventSiteId;
+                                gcRevalTopPicking.insert();
+                            }
+                        }
+                        else
+                        {
+                            while select inventSiteLocal
+                                where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+                                    && inventSiteLocal.SiteId != npParameters.InventSiteId
+                                    && inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+                                    && inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+                            {
+                                if (_contract.parmExcludeZeroCostSites() && inventSiteLocal.GCZeroCostSite == NoYes::No ||
+                                    !_contract.parmExcludeZeroCostSites())
+                                {
+                                    gcRevalTopPicking.clear();
+                                    //gcRevalTopPicking.BatchHeaderId = batchHeader.parmBatchHeaderId();
+                                    gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId = gcRevalTopPickingHeader.RecId;
+                                    gcRevalTopPicking.Processed = NoYes::No;
+                                    gcRevalTopPicking.ItemId = inventTable.ItemId;
+                                    gcRevalTopPicking.InventSiteId = inventSiteLocal.SiteId;
+                                    gcRevalTopPicking.insert();
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        inventSite = _contract.parmInventSite();
+                        if(!inventSite.empty())
+                        {
+                            iterator	=	new	ListIterator(inventSite);
+                            while(iterator.more())
+                            {
+                                select SiteId , GCZeroCostSite from inventSiteLocal where inventSiteLocal.SiteId == iterator.value();
+                                if(_contract.parmExcludeZeroCostSites() && inventSiteLocal.GCZeroCostSite == NoYes::Yes ||
+                                    !_contract.parmExcludeZeroCostSites())
+                                {
+                                    gcRevalTopPicking.clear();
+                                    //gcRevalTopPicking.BatchHeaderId = batchHeader.parmBatchHeaderId();
+                                    gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId = gcRevalTopPickingHeader.RecId;
+                                    gcRevalTopPicking.Processed = NoYes::No;
+                                    gcRevalTopPicking.ItemId = inventTable.ItemId;
+                                    gcRevalTopPicking.InventSiteId = inventSiteLocal.SiteId;
+                                    gcRevalTopPicking.insert();
+                                }
+                                iterator.next();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+       
+        completedTask = this.createTask(batchHeader,
+                            new Query(packedQuery),
+                            _contract.parmVersion(),
+                            NoYes::No,
+                            calcDate,
+                            _contract.parmInventSite(),
+                            _contract.parmcreateHistoryRecord(),
+                            _contract.parmExcludeZeroCostSites(),
+                            _contract.parmUseSystemDate(),
+                            "Revaluation for metal costs - Completed",
+                            methodStr(GCRevalStandardCostContractService, processTopPickingCompleted),
+                            null,
+                            gcRevalTopPickingHeader.RecId);
+
+        for(counter = 1; counter <= _contract.parmTopPickingThreads(); counter++)
+        {
+            this.createTask(batchHeader,
+                            new Query(packedQuery),
+                            _contract.parmVersion(),
+                            NoYes::No,
+                            calcDate,
+                            _contract.parmInventSite(),
+                            _contract.parmcreateHistoryRecord(),
+                            _contract.parmExcludeZeroCostSites(),
+                            _contract.parmUseSystemDate(),
+                            strFmt("Revaluation for metal costs - Task %1", counter),
+                            methodStr(GCRevalStandardCostContractService, processSiteTopPicking),
+                            completedTask,
+                            gcRevalTopPickingHeader.RecId);
+        }
+        // After all of the runtime tasks are created, save thebatchheader
+        if(batchHeader)
+        {
+            // Saving the header will create the batch records and adddependencies where needed
+            batchHeader.save();
+        }
+        
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processTopPickingItem</Name>
+				<Source><![CDATA[
+    private void processTopPickingItem(GCRevalStandardCostContract _contract)
+    {
+        container                                   packedQuery = SysOperationHelper::base64Decode(_contract.parmQuery());
+        Query                                       query = new Query(packedQuery);
+        QueryRun                                    queryRun;
+        BatchHeader                                 batchHeader;
+        InventTable									inventTable;
+        InventModelGroupItem						inventModelGroupItem;
+        TransDate									calcDate;
+        InventItemPriceSim							inventItemPriceSim;
+        GCRevalTopPickingHeader						gcRevalTopPickingHeader;
+        GCRevalTopPicking							gcRevalTopPicking;
+        SysOperationServiceController				completedTask;
+        Counter										counter;
+
+        if (_contract.parmUseSystemDate())
+        {
+            calcDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        }
+        else
+        {
+            calcDate = _contract.parmDate();
+        }
+        batchHeader = BatchHeader::getCurrentBatchHeader();
+
+        ttsbegin;
+        gcRevalTopPickingHeader.BatchHeaderId = batchHeader.parmBatchHeaderId();
+        gcRevalTopPickingHeader.StartDateTime = DateTimeUtil::getSystemDateTime();
+        gcRevalTopPickingHeader.BatchCaption = batchHeader.parmCaption();
+        gcRevalTopPickingHeader.insert();
+        ttscommit;
+
+        queryRun = new QueryRun(query);
+        while (queryRun.next())
+        {
+            if (queryRun.changed(tableNum(InventTable)))
+            {
+                inventTable = queryRun.get(tableNum(InventTable));
+                inventModelGroupItem	=	queryRun.get(tableNum(InventModelGroupItem));
+
+                ttsbegin;
+                delete_from inventItemPriceSim
+                    where inventItemPriceSim.ItemId == inventTable.ItemId;
+                ttscommit;
+
+                // If we do not have a batch header yet
+                if(!batchHeader)
+                {
+                    batchHeader = BatchHeader::getCurrentBatchHeader();
+                }
+                if(this.checkMetalExists(inventTable.ItemId) && inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+                {
+                    gcRevalTopPicking.clear();
+                    gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId = gcRevalTopPickingHeader.RecId;
+                    gcRevalTopPicking.Processed = NoYes::No;
+                    gcRevalTopPicking.ItemId = inventTable.ItemId;
+                    gcRevalTopPicking.insert();
+                }
+            }
+        }
+       
+        completedTask = this.createTask(batchHeader,
+                            new Query(packedQuery),
+                            _contract.parmVersion(),
+                            NoYes::No,
+                            calcDate,
+                            _contract.parmInventSite(),
+                            _contract.parmcreateHistoryRecord(),
+                            _contract.parmExcludeZeroCostSites(),
+                            _contract.parmUseSystemDate(),
+                            "Revaluation for metal costs - Completed",
+                            methodStr(GCRevalStandardCostContractService, processTopPickingCompleted),
+                            null,
+                            gcRevalTopPickingHeader.RecId);
+
+        for(counter = 1; counter <= _contract.parmTopPickingThreads(); counter++)
+        {
+            this.createTask(batchHeader,
+                            new Query(packedQuery),
+                            _contract.parmVersion(),
+                            _contract.parmAllSites(),
+                            calcDate,
+                            _contract.parmInventSite(),
+                            _contract.parmcreateHistoryRecord(),
+                            _contract.parmExcludeZeroCostSites(),
+                            _contract.parmUseSystemDate(),
+                            strFmt("Revaluation for metal costs - Task %1", counter),
+                            methodStr(GCRevalStandardCostContractService, processItemTopPicking),
+                            completedTask,
+                            gcRevalTopPickingHeader.RecId);
+        }
+        // After all of the runtime tasks are created, save thebatchheader
+        if(batchHeader)
+        {
+            // Saving the header will create the batch records and adddependencies where needed
+            batchHeader.save();
+        }
+        
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processItemTopPicking</Name>
+				<Source><![CDATA[
+    public void processItemTopPicking(GCRevalStandardCostContract _contract)
+    {
+        BatchHeader									batchHeader = BatchHeader::getCurrentBatchHeader();
+        str											errorMessage;
+        GCRevalTopPicking							gcRevalTopPicking;
+        GCRevalTopPickingRetry						gcRevalTopPickingRetryCount,
+                                                    gcRevalTopPickingRetry;
+        InventTable									inventTable;
+        InventModelGroupItem						inventModelGroupItem;
+        InventItemGroupItem							inventItemGroupItem;
+        GCEcoResProductParameters					gcProductParameters = GCEcoResProductParameters::find();
+        GCEcoResProductNPParameters					npParameters = GCEcoResProductNPParameters::find();
+        InventSite									inventSiteLocal;
+        List										inventSite;
+        ListIterator								iterator;
+        InventItemPriceSim							inventItemPriceSim;
+        InventSiteId								inventSiteId;
+        #OCCRetryCount
+
+        gcRevalTopPicking.readPast(true);
+        do
+        {
+            try
+            {
+                ttsBegin;
+                // when it finds no more work item to process do-while loop will exit
+                select pessimisticlock firstOnly * from gcRevalTopPicking
+                    where gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId == _contract.parmGCRevalTopPickingHeaderRecId()
+                        && gcRevalTopPicking.Processed == NoYes::No;
+
+                select count(RecId) from gcRevalTopPickingRetryCount
+                    where gcRevalTopPickingRetryCount.GCRevalTopPickingRefRecId == gcRevalTopPicking.RecId;
+                if (gcRevalTopPickingRetryCount.RecId >= 5)
+                {
+                    gcRevalTopPicking.Processed = NoYes::Yes;
+                    gcRevalTopPicking.Error = NoYes::Yes;
+                    gcRevalTopPicking.update();
+                }
+                else
+                {
+                    if (gcRevalTopPicking.ItemId)
+                    {
+                        inventTable = InventTable::find(gcRevalTopPicking.ItemId);
+                        inventModelGroupItem = inventTable.inventModelGroupItem();
+                        inventItemGroupItem	 = inventTable.inventItemGroupItem();
+
+                        inventSite = new List(Types::String);
+                
+                        ttsbegin;
+                        delete_from inventItemPriceSim
+                            where inventItemPriceSim.ItemId == inventTable.ItemId;
+                        ttscommit;
+
+                        // If we do not have a batch header yet
+                        if(!batchHeader)
+                        {
+                            batchHeader = BatchHeader::getCurrentBatchHeader();
+                        }
+                        if(this.checkMetalExists(inventTable.ItemId) && inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+                        {
+                            if (_contract.parmAllSites() == NoYes::Yes)
+                            {
+                                if (EcoResProduct::find(inventTable.Product).ProductType == EcoResProductType::Service)
+                                {
+                                    if (gcProductParameters.ServiceInventSiteId)
+                                    {
+                                        this.processCalculation(gcProductParameters.ServiceInventSiteId, gcRevalTopPicking.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                                    }
+                                }
+                                else if (inventTable.GCProductType == GCProductType::NP)
+                                {
+                                    if (npParameters.InventSiteId)
+                                    {
+                                        this.processCalculation(npParameters.InventSiteId, gcRevalTopPicking.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                                    }
+                                }
+                                else if (inventTable.GCProductType == GCProductType::Unallocated)
+                                {
+                                    inventSiteId = inventTable.GCAvailableForReconciliation == true ? gcProductParameters.MetalCreditsInventSiteId : gcProductParameters.UnallocatedInventSiteId;
+                                    if (inventSiteId)
+                                    {
+                                        this.processCalculation(inventSiteId, gcRevalTopPicking.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                                    }
+                                }
+                                else
+                                {
+                                    while select inventSiteLocal
+                                        where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+                                            && inventSiteLocal.SiteId != npParameters.InventSiteId
+                                            && inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+                                            && inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+                                    {
+                                        if (_contract.parmExcludeZeroCostSites() && inventSiteLocal.GCZeroCostSite == NoYes::No ||
+                                            !_contract.parmExcludeZeroCostSites())
+                                        {
+                                            this.processCalculation(inventSiteLocal.SiteId, gcRevalTopPicking.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                inventSite = _contract.parmInventSite();
+                                if(!inventSite.empty())
+                                {
+                                    iterator	=	new	ListIterator(inventSite);
+                                    while(iterator.more())
+                                    {
+                                        select SiteId , GCZeroCostSite from inventSiteLocal where inventSiteLocal.SiteId == iterator.value();
+
+                                        if(_contract.parmExcludeZeroCostSites() && inventSiteLocal.GCZeroCostSite == NoYes::Yes ||
+                                            !_contract.parmExcludeZeroCostSites())
+                                        {
+                                            this.processCalculation(inventSiteLocal.SiteId, gcRevalTopPicking.ItemId, _contract.parmDate(), _contract.parmVersion(), _contract.parmcreateHistoryRecord());
+                                        }
+                                        iterator.next();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if(gcRevalTopPicking)
+                    {
+                        gcRevalTopPicking.Processed = NoYes::Yes;
+                        gcRevalTopPicking.update();
+                    }
+                }
+                ttsCommit;
+            }
+            catch (Exception::Deadlock)
+            {
+                this.processRetry(gcRevalTopPicking);
+            }
+            catch (Exception::UpdateConflict)
+            {
+                this.processRetry(gcRevalTopPicking);
+            }
+            catch
+            {
+                this.processRetry(gcRevalTopPicking);
+            }
+        }
+        while (gcRevalTopPicking);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>createTask</Name>
+				<Source><![CDATA[
+    private SysOperationServiceController createTask(BatchHeader _batchHeader,
+                                                    Query _taskQuery,
+                                                    CostingVersionId _costingVersionId,
+                                                    GCAllSites _allSites,
+                                                    DateOnhand _date,
+                                                    List _inventSite,
+                                                    GCcreateHistoryRecord _createHistoryRecord,
+                                                    GCExcludeZeroCostSites _excludeZeroCostSites,
+                                                    NoYesId _useSystemDate,
+                                                    BatchCaption _batchCaption,
+                                                    IdentifierName _methodName,
+                                                    SysOperationServiceController _dependentTask = null,
+                                                    RefRecId _gcRevalTopPickingHeaderRecId = 0)
+    {
+        SysOperationServiceController               runTaskController;
+        GCRevalStandardCostContract					runTaskContract;
+
+        // Create new controller for the runtime task
+        runTaskController = new SysOperationServiceController(classStr(GCRevalStandardCostContractService), _methodName);
+        // Get a data contract for the controller
+        runTaskContract = runTaskController.getDataContractObject('_contract');
+
+        // set variables for the data contract
+        runTaskContract.parmQuery(SysOperationHelper::base64Encode(_taskQuery.pack()));
+        runTaskContract.parmVersion(_costingVersionId);
+        runTaskContract.parmAllSites(_allSites);
+        runTaskContract.parmDate(_date);
+        runTaskContract.parmInventSite(_inventSite);
+        runTaskContract.parmcreateHistoryRecord(_createHistoryRecord);
+        runTaskContract.parmExcludeZeroCostSites(_excludeZeroCostSites);
+        runTaskContract.parmUseSystemDate(_useSystemDate);
+        runTaskContract.parmGCRevalTopPickingHeaderRecId(_gcRevalTopPickingHeaderRecId);
+        runTaskController.parmExecutionMode(SysOperationExecutionMode::Synchronous);
+
+        runTaskController.batchInfo().parmCaption(_batchCaption);
+
+        // Create a runtime task
+        if (_batchHeader)
+        {
+            _batchHeader.addRuntimeTask(runTaskController, BatchHeader::getCurrentBatchTask().RecId);
+    
+            if (_dependentTask)
+            {
+                _batchHeader.addDependency(_dependentTask, runTaskController, BatchDependencyStatus::Finished);
+            }
+        }
+        else
+        {
+            runTaskController.run();
+        }
+
+        return runTaskController;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>checkMetalExists</Name>
+				<Source><![CDATA[
+    public boolean checkMetalExists(ItemId itemId)
+    {
+        List                    batchAttbrRelation;
+        ListIterator            batchIterator;
+        GCEcoResProductParameters productParameters;
+        boolean					checkMetal = false;
+        productParameters = GCEcoResProductParameters::find();
+        batchAttbrRelation = PdsBatchAttribByItem::batchAttributesForItem(itemId);
+        batchIterator = new ListIterator(batchAttbrRelation);
+        while(batchIterator.more())
+        {
+            switch(batchIterator.value())
+            {
+                case productParameters.GCBatchAttribGold:
+                case productParameters.GCBatchAttribSilver:
+                case productParameters.GCBatchAttribPlatinum:
+                case productParameters.GCBatchAttribPalladium:
+                    checkMetal = true;
+                    break;
+            }
+            batchIterator.next();
+        }
+
+        return checkMetal;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>quantity</Name>
+				<Source><![CDATA[
+    public InventQty quantity(ItemId	_itemId)
+    {
+        InventQty	inventQty;
+        if(PdsGlobal::pdsIsCWItem(_itemId))
+        {
+            inventQty	=	PdsCatchWeight::inventQty(_itemId,1);
+        }
+        else
+        {
+            inventQty	=	1;
+        }
+
+        return inventQty;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getTextFromInfoLog</Name>
+				<Source><![CDATA[
+    public str getTextFromInfoLog(int infologCurrent = 2)
+    {
+        container   infologCon, infoline;
+        Exception   exception;
+        int         i;
+        str         message;
+        str         helpURL;
+        ClassName   actionClassName;
+        container   actionClassOptions;
+   
+        str result = "";
+
+        infologCon = infolog.cut();
+
+        for(i = infologCurrent ; i <= conLen(infologCon) ; i++)
+        {
+            infoline = conPeek(infologCon, i);
+            message = conPeek(infoline, 2);
+
+            if(conLen(infoline) > 3 && conPeek(infoline, 4))
+            {
+                actionClassName    = classId2Name(conPeek(infoline, 4));
+                actionClassOptions = conPeek(infoline, 5);
+            }
+
+            result += strFmt("%1: %2",
+                        strReplace(subStr(message,
+                                   strScan(message, '\t',
+                                   strLen(message),
+                                   -strLen(message) + 1) - 1,
+                                   -strLen(message)),
+                                   '\t',
+                                   '>'),
+                       subStr(message,
+                            strScan(message, '\t',
+                            strLen(message),
+                            -strLen(message)) + 1,
+                            strLen(message)));
+            result += "\r\n";
+        }
+
+        return result;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>sendErrorEmail</Name>
+				<Source><![CDATA[
+    public void sendErrorEmail(str		_errorMessage)
+    {
+        SysMailerMessageBuilder		messageBuilder = new SysMailerMessageBuilder();
+        container					conToEmail;
+        UserGroupList				userGroupList;
+        UserInfo					userInfo;
+        InventParameters			inventParameters	=	InventParameters::find();
+
+        str							hetmlMessage = "<html><body>%1</body></html>";
+
+        hetmlMessage = strFmt(hetmlMessage,_errorMessage);
+        while select userId,groupId from userGroupList
+             join userInfo
+                 where userGroupList.userId == userInfo.id
+             && userGroupList.groupId == inventParameters.GCUserGroupId
+        {
+            conToEmail += userInfo.networkAlias;
+        }
+        if (conToEmail != conNull())
+        {
+            if (SysEmailParameters::ValidateEMail(SysEmailParameters::find().GCDefaultEmailAddress))
+            {
+                try
+                {
+                    messageBuilder.setSubject(strFmt('Error while activating price'));
+                    messageBuilder.setFrom(SysEmailParameters::find().GCDefaultEmailAddress);
+                    messageBuilder.addTo(con2Str(conToEmail,";"));
+                    messageBuilder.setBody(_errorMessage);
+                    SysMailerFactory::sendNonInteractive(messageBuilder.getMessage());
+                    Info("@GC:GCEmailMsg");
+                }
+                catch (Exception::CLRError)
+                {
+                    error("Email could not be sent.");
+                }
+                catch (Exception::Error)
+                {
+                    error("Email could not be sent.");
+                }
+                catch
+                {
+                    error("Email could not be sent.");
+                }
+            }
+            else
+            {
+                warning("@GC:EmailFromWarning");
+            }
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>cleanupTopPickingHistory</Name>
+				<Source><![CDATA[
+    public void cleanupTopPickingHistory()
+    {
+        GCRevalTopPickingHeader gcRevalTopPickingHeader;
+        date					cleanupDate = systemDateGet() - 7;
+
+        ttsbegin;
+        delete_from gcRevalTopPickingHeader
+            where gcRevalTopPickingHeader.StartDateTime <= DateTimeUtil::newDateTime(cleanupDate,0);
+        ttscommit;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processCalculation</Name>
+				<Source><![CDATA[
+    public void processCalculation(InventSiteId _inventSiteId, ItemId _itemId,
+        TransDate _calcDate, CostingVersionId _versionId, GCCreateHistoryRecord _createHistoryRecord)
+    {
+        InventDim						inventDim;
+        GCItemPriceCalculation			priceCalculation = new GCItemPriceCalculation();
+        UnitIDBase						unitId;
+        InventItemPriceSim				inventItemPriceSim;
+        InventItemPriceActivationJob	inventItemPriceActivationJob;
+
+        inventDim.InventSiteId = _inventSiteId;
+        inventDim = InventDim::findOrCreate(inventDim);
+        priceCalculation.parmItemId(_itemId);
+        unitId	=	InventTableModule::find(_itemId,ModuleInventPurchSales::Invent).UnitId;
+        priceCalculation.parmUnitId(unitId);
+        priceCalculation.parmcalculationDate(_calcDate);
+        priceCalculation.parmVersionId(_versionId);
+        priceCalculation.parmInventDim(inventDim);
+        priceCalculation.parmInventQty(this.quantity(_itemId));
+        inventItemPriceSim	=	priceCalculation.InventoryRevalCalc(false, _createHistoryRecord); //added for sending mail
+        if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+        {
+            inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+            inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processCalculationAllSite</Name>
+				<Source><![CDATA[
+    public void processCalculationAllSite(ItemId _itemId,
+        TransDate _calcDate, CostingVersionId _versionId, GCCreateHistoryRecord _createHistoryRecord, boolean _zeroCostSites)
+    {
+        GCItemPriceCalculation			priceCalculation = new GCItemPriceCalculation();
+        UnitIDBase						unitId;
+        InventItemPriceSim				inventItemPriceSim;
+        InventItemPriceActivationJob	inventItemPriceActivationJob;
+
+        priceCalculation.parmItemId(_itemId);
+        unitId	=	InventTableModule::find(_itemId,ModuleInventPurchSales::Invent).UnitId;
+        priceCalculation.parmUnitId(unitId);
+        priceCalculation.parmcalculationDate(_calcDate);
+        priceCalculation.parmVersionId(_versionId);
+        priceCalculation.parmInventQty(this.quantity(_itemId));
+        inventItemPriceSim	=	priceCalculation.InventoryRevalCalcforAllSite(false, _zeroCostSites, _createHistoryRecord);
+        /*if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+        {
+            inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+            inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+        }*/
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processTopPickingCompleted</Name>
+				<Source><![CDATA[
+    public void processTopPickingCompleted(GCRevalStandardCostContract _contract)
+    {
+        GCRevalTopPickingHeader			gcRevalTopPickingHeader;
+        GCRevalTopPicking				gcRevalTopPicking;
+        boolean							hasErrors;
+        str								errorMessage;
+
+        while select gcRevalTopPicking
+            where gcRevalTopPicking.GCRevalTopPickingHeaderRefRecId == _contract.parmGCRevalTopPickingHeaderRecId()
+            && gcRevalTopPicking.Error == NoYes::Yes
+        {
+            hasErrors = true;
+            errorMessage +=	strFmt("%1 <br>", gcRevalTopPicking.errorMessage());
+        }
+
+        if (hasErrors)
+        {
+            this.sendErrorEmail(errorMessage);
+        }
+        ttsbegin;
+        select firstonly forupdate gcRevalTopPickingHeader
+            where gcRevalTopPickingHeader.RecId == _contract.parmGCRevalTopPickingHeaderRecId();
+        if (gcRevalTopPickingHeader)
+        {
+            gcRevalTopPickingHeader.EndDateTime = DateTimeUtil::getSystemDateTime();
+            gcRevalTopPickingHeader.update();
+        }
+        ttscommit;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>processRetry</Name>
+				<Source><![CDATA[
+    public void processRetry(GCRevalTopPicking _gcRevalTopPicking)
+    {
+        GCRevalTopPickingRetry gcRevalTopPickingRetry;
+
+        ttsbegin;
+        gcRevalTopPickingRetry.GCRevalTopPickingRefRecId = _gcRevalTopPicking.RecId;
+        gcRevalTopPickingRetry.ErrorMessage = strFmt("Item number: %1, Site %2, Reason for failure: %3 <br>"
+                                                            ,_gcRevalTopPicking.ItemId
+                                                            ,_gcRevalTopPicking.InventSiteId
+                                                            ,this.getTextFromInfoLog());
+        gcRevalTopPickingRetry.insert();
+        ttscommit;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

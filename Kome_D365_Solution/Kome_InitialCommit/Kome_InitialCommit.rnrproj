@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <BuildTasksDirectory Condition=" '$(BuildTasksDirectory)' == ''">$(MSBuildProgramFiles32)\MSBuild\Microsoft\Dynamics\AX</BuildTasksDirectory>
+    <Model>KomeCook1</Model>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <OutputPath>bin</OutputPath>
+    <SchemaVersion>2.0</SchemaVersion>
+    <GenerateCrossReferences>True</GenerateCrossReferences>
+    <RunAppCheckerRules>False</RunAppCheckerRules>
+    <LogAppcheckerDiagsAsErrors>False</LogAppcheckerDiagsAsErrors>
+    <DeployOnline>False</DeployOnline>
+    <ProjectGuid>{3138f704-314a-4ff9-8c4a-fd45c905293f}</ProjectGuid>
+    <Name>Kome_InitialCommit</Name>
+    <RootNamespace>Kome_InitialCommit</RootNamespace>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <Configuration>Debug</Configuration>
+    <DBSyncInBuild>False</DBSyncInBuild>
+    <GenerateFormAdaptors>False</GenerateFormAdaptors>
+    <Company>
+    </Company>
+    <Partition>initial</Partition>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DataEntityExpandParentChildRelations>False</DataEntityExpandParentChildRelations>
+    <DataEntityUseLabelTextAsFieldName>False</DataEntityUseLabelTextAsFieldName>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Folder Include="Classes\" />
+    <Folder Include="Data Entity Extensions\" />
+    <Folder Include="Form Extensions\" />
+    <Folder Include="Label Files\" />
+    <Folder Include="Output Menu Item Extensions\" />
+    <Folder Include="Reports\" />
+    <Folder Include="Table Extensions\" />
+    <Folder Include="View Extensions\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="AxClass\Kome_Class_Bank_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Class_Bank_Extension</Name>
+      <Link>Classes\Kome_Class_Bank_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Class_BudgetPlanActiveView_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Class_BudgetPlanActiveView_Extension</Name>
+      <Link>Classes\Kome_Class_BudgetPlanActiveView_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Class_BudgetPlanLayoutManager_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Class_BudgetPlanLayoutManager_Extension</Name>
+      <Link>Classes\Kome_Class_BudgetPlanLayoutManager_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Class_CaseAssociationProvider_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Class_CaseAssociationProvider_Extension</Name>
+      <Link>Classes\Kome_Class_CaseAssociationProvider_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Class_LedgerJournalDP_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Class_LedgerJournalDP_Extension</Name>
+      <Link>Classes\Kome_Class_LedgerJournalDP_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Class_WHSOutboundShipmentWorkTransactionType_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Class_WHSOutboundShipmentWorkTransactionType_Extension</Name>
+      <Link>Classes\Kome_Class_WHSOutboundShipmentWorkTransactionType_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_FormDS_VendTable_LogisticsElectronicAddress_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_FormDS_VendTable_LogisticsElectronicAddress_Extension</Name>
+      <Link>Classes\Kome_FormDS_VendTable_LogisticsElectronicAddress_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Form_BudgetPlan_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Form_BudgetPlan_Extension</Name>
+      <Link>Classes\Kome_Form_BudgetPlan_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Form_CustGroup_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Form_CustGroup_Extension</Name>
+      <Link>Classes\Kome_Form_CustGroup_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Form_CustOpenTrans_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Form_CustOpenTrans_Extension</Name>
+      <Link>Classes\Kome_Form_CustOpenTrans_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Kate_FixMissingSO">
+      <SubType>Content</SubType>
+      <Name>Kome_Kate_FixMissingSO</Name>
+      <Link>Classes\Kome_Kate_FixMissingSO</Link>
+    </Content>
+    <Content Include="AxClass\Kome_LabelTest">
+      <SubType>Content</SubType>
+      <Name>Kome_LabelTest</Name>
+      <Link>Classes\Kome_LabelTest</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Table_LedgerTransModuleTmp_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Table_LedgerTransModuleTmp_Extension</Name>
+      <Link>Classes\Kome_Table_LedgerTransModuleTmp_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_Table_WHSLoadTable_Extension">
+      <SubType>Content</SubType>
+      <Name>Kome_Table_WHSLoadTable_Extension</Name>
+      <Link>Classes\Kome_Table_WHSLoadTable_Extension</Link>
+    </Content>
+    <Content Include="AxClass\Kome_ViewAnalysis">
+      <SubType>Content</SubType>
+      <Name>Kome_ViewAnalysis</Name>
+      <Link>Classes\Kome_ViewAnalysis</Link>
+    </Content>
+    <Content Include="AxClass\LedgerJournalControllerCopy">
+      <SubType>Content</SubType>
+      <Name>LedgerJournalControllerCopy</Name>
+      <Link>Classes\LedgerJournalControllerCopy</Link>
+    </Content>
+    <Content Include="AxDataEntityViewExtension\ProjProjectWBSDraftEntity.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>ProjProjectWBSDraftEntity.KomeCook1</Name>
+      <Link>Data Entity Extensions\ProjProjectWBSDraftEntity.KomeCook1</Link>
+    </Content>
+    <Content Include="AxFormExtension\BudgetPlan.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>BudgetPlan.KomeCook1</Name>
+      <Link>Form Extensions\BudgetPlan.KomeCook1</Link>
+    </Content>
+    <Content Include="AxFormExtension\LedgerTransBase.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>LedgerTransBase.KomeCook1</Name>
+      <Link>Form Extensions\LedgerTransBase.KomeCook1</Link>
+    </Content>
+    <Content Include="AxFormExtension\LedgerTransVoucher.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>LedgerTransVoucher.KomeCook1</Name>
+      <Link>Form Extensions\LedgerTransVoucher.KomeCook1</Link>
+    </Content>
+    <Content Include="AxLabelFile\FormRunConfiguration_Extension_en-US">
+      <SubType>Content</SubType>
+      <Name>FormRunConfiguration_Extension_en-US</Name>
+      <Link>Label Files\FormRunConfiguration_Extension_en-US</Link>
+    </Content>
+    <Content Include="AxLabelFile\Kome_FormRunConfiguration_Label_Extension_en-US">
+      <SubType>Content</SubType>
+      <Name>Kome_FormRunConfiguration_Label_Extension_en-US</Name>
+      <Link>Label Files\Kome_FormRunConfiguration_Label_Extension_en-US</Link>
+    </Content>
+    <Content Include="AxMenuItemOutputExtension\LedgerJournal.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>LedgerJournal.KomeCook1</Name>
+      <Link>Output Menu Item Extensions\LedgerJournal.KomeCook1</Link>
+    </Content>
+    <Content Include="AxReport\LedgerJournalCopy">
+      <SubType>Content</SubType>
+      <Name>LedgerJournalCopy</Name>
+      <Link>Reports\LedgerJournalCopy</Link>
+    </Content>
+    <Content Include="AxTableExtension\BudgetPlanLineActiveView.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>BudgetPlanLineActiveView.KomeCook1</Name>
+      <Link>Table Extensions\BudgetPlanLineActiveView.KomeCook1</Link>
+    </Content>
+    <Content Include="AxTableExtension\LedgerJournalTmp.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>LedgerJournalTmp.KomeCook1</Name>
+      <Link>Table Extensions\LedgerJournalTmp.KomeCook1</Link>
+    </Content>
+    <Content Include="AxViewExtension\SysMessageUnqueuedView.KomeCook1">
+      <SubType>Content</SubType>
+      <Name>SysMessageUnqueuedView.KomeCook1</Name>
+      <Link>View Extensions\SysMessageUnqueuedView.KomeCook1</Link>
+    </Content>
+    <Content Include="FormRunConfiguration_Extension.en-US.label.txt">
+      <SubType>Content</SubType>
+      <Name>FormRunConfiguration_Extension.en-US.label.txt</Name>
+      <DependentUpon>AxLabelFile\FormRunConfiguration_Extension_en-US</DependentUpon>
+    </Content>
+    <Content Include="Kome_FormRunConfiguration_Label_Extension.en-US.label.txt">
+      <SubType>Content</SubType>
+      <Name>Kome_FormRunConfiguration_Label_Extension.en-US.label.txt</Name>
+      <DependentUpon>AxLabelFile\Kome_FormRunConfiguration_Label_Extension_en-US</DependentUpon>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.Common.targets" />
+  <Import Project="$(BuildTasksDirectory)\Microsoft.Dynamics.Framework.Tools.BuildTasks.17.0.targets" />
+</Project>

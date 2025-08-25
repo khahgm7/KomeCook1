@@ -1,0 +1,3 @@
+﻿BaseLockedViewName=Chọn
+NewLabel0=Label files created on 07/18/2025 08:18:11 for label file Id Kome_FormRunConfiguration_Label_Extension and language en-US
+ ;Label file comment - see above label

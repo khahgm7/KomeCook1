@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Class_BudgetPlanActiveView_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(classStr(BudgetPlanActiveView))]
+final class Kome_Class_BudgetPlanActiveView_Extension
+{
+    private BudgetPlanLayoutManager localLayout;
+    private Map                     customFields;
+}
+
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>createBudgetPlanLineActiveView</Name>
+				<Source><![CDATA[
+    protected void createBudgetPlanLineActiveView()
+    {
+        this.setGlobals();
+        this.getCustomFields();
+        
+        next createBudgetPlanLineActiveView();
+
+        this.restoreCustomFields();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setGlobals</Name>
+				<Source><![CDATA[
+    private void setGlobals()
+    {
+        localLayout = layoutManager;
+        customFields = new Map(Types::Container, Types::Class);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getCustomFields</Name>
+				<Source><![CDATA[
+    private void getCustomFields()
+    {
+        BudgetPlanLineActiveView lineActiveView;
+        
+        while select lineActiveView
+            where lineActiveView.BudgetPlanHeader == localLayout.getBudgetPlanHeaderRecId()
+        {
+            container key;
+
+            key += lineActiveView.DimensionValue1;
+            key += lineActiveView.DimensionValue2;
+            key += lineActiveView.DimensionValue3;
+
+            Map valueMap = new Map(Types::Integer, Types::String);
+
+            valueMap.insert(fieldNum(BudgetPlanLineActiveView, CustomField1), any2Str(lineActiveView.CustomField1));
+
+            customFields.insert(key, valueMap);
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>restoreCustomFields</Name>
+				<Source><![CDATA[
+    private void restoreCustomFields()
+    {
+        ttsbegin;
+
+        BudgetPlanLineActiveView lineActiveView;
+        
+        while select forupdate lineActiveView
+            where lineActiveView.BudgetPlanHeader == localLayout.getBudgetPlanHeaderRecId()
+        {
+            container key;
+
+            key += lineActiveView.DimensionValue1;
+            key += lineActiveView.DimensionValue2;
+            key += lineActiveView.DimensionValue3;
+
+            Map valueMap = customFields.exists(key) ? customFields.lookup(key) : null;
+            
+            if(valueMap)
+            {
+                MapEnumerator me = valueMap.getEnumerator();
+
+                while(me.moveNext())
+                    if(lineActiveView.(me.currentKey()) != me.currentValue())
+                            lineActiveView.(me.currentKey()) = me.currentValue();
+
+                lineActiveView.doUpdate();                    
+            }            
+        }
+
+        ttscommit;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

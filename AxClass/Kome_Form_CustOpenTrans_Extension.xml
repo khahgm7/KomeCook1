@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Form_CustOpenTrans_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(formStr(CustOpenTrans))]
+final class Kome_Form_CustOpenTrans_Extension
+{
+    private QueryBuildRange qbrCustTransOpenAccountNum;
+
+}
+
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>updateDataSourceDynamic</Name>
+				<Source><![CDATA[
+    public void updateDataSourceDynamic()
+    {
+        next updateDataSourceDynamic();
+
+        this.handleCustomQueryRange();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>handleCustomQueryRange</Name>
+				<Source><![CDATA[
+    protected void handleCustomQueryRange()
+    {
+        qbrCustTransOpenAccountNum.value(queryValue(manager.getCustVendAccountNum()));
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>updateDataSourceStatic</Name>
+				<Source><![CDATA[
+    public void updateDataSourceStatic()
+    {
+        next updateDataSourceStatic();
+
+        this.setCustomQueryRange();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setCustomQueryRange</Name>
+				<Source><![CDATA[
+    protected void setCustomQueryRange()
+    {
+        qbrCustTransOpenAccountNum = CustTransOpen_ds.query().dataSourceTable(tableNum(CustTransOpen)).addRange(fieldNum(CustTransOpen, AccountNum));
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

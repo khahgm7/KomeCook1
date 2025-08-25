@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_FormDS_VendTable_LogisticsElectronicAddress_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(formDataSourceStr(VendTable, LogisticsElectronicAddress))]
+final class Kome_FormDS_VendTable_LogisticsElectronicAddress_Extension
+{
+    private RefRecId currentContactInfoRecId;
+
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>executeQuery</Name>
+				<Source><![CDATA[
+    public void executeQuery()
+    {
+        //this.saveCurrentRecord();
+        
+        next executeQuery();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>saveCurrentRecord</Name>
+				<Source><![CDATA[
+    protected void saveCurrentRecord()
+    {
+        currentContactInfoRecId = this.currentRecord().RecId;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>currentRecord</Name>
+				<Source><![CDATA[
+    protected LogisticsElectronicAddress currentRecord()
+    {
+        return this.cursor() as LogisticsElectronicAddress;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>write</Name>
+				<Source><![CDATA[
+    public void write()
+    {
+        next write();
+
+        //this.repositionCreatedRecord();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>repositionCreatedRecord</Name>
+				<Source><![CDATA[
+    protected void repositionCreatedRecord()
+    {
+        FormRun currentFormRun = this.formRun() as FormRun;
+
+        if(formHasMethod(currentFormRun, formMethodStr(VendTable, parmContactInfoRecId)))
+            currentFormRun.parmContactInfoRecId(currentContactInfoRecId);
+
+        this.executeQuery();
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

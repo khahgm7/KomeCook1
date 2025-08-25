@@ -1,0 +1,1107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>GCItemPriceCalculation</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+class GCItemPriceCalculation
+{
+    ItemId				itemId;
+    InventQty			inventQty;
+    InventDim			inventDim;
+    UnitIDBase			unitId;
+    CostingVersionId	costingVersionId;
+    TransDate			calculationDate;
+    CostingVersion		costingVersion;
+    InventSiteId		inventSiteId;
+    boolean				allSite = false;
+   
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>parmInventSiteId</Name>
+				<Source><![CDATA[
+    public	ItemId	parmInventSiteId(InventSiteId  _inventSiteId = inventSiteId)
+    {
+        allSite = true;
+		inventSiteId = _inventSiteId;
+        return inventSiteId;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmItemId</Name>
+				<Source><![CDATA[
+    public	ItemId	parmItemId(ItemId  _itemId = itemId)
+    {
+        itemId = _itemId;
+        return itemId;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmUnitId</Name>
+				<Source><![CDATA[
+    public	str	parmUnitId(str  _unitId = unitId)
+    {
+        unitId = _unitId;
+        return unitId;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmVersionId</Name>
+				<Source><![CDATA[
+    public	    CostingVersionId	parmVersionId(CostingVersionId  _costingVersionId = costingVersionId)
+    {
+        costingVersionId = _costingVersionId;
+        return costingVersionId;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmcalculationDate</Name>
+				<Source><![CDATA[
+    public	TransDate	parmcalculationDate(TransDate  _calculationDate = calculationDate)
+    {
+        calculationDate = _calculationDate;
+        return calculationDate;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmInventDim</Name>
+				<Source><![CDATA[
+    public	InventDim	parmInventDim(InventDim  _inventDim = inventDim)
+    {
+        inventDim = _inventDim;
+        return inventDim;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmInventQty</Name>
+				<Source><![CDATA[
+    public	InventQty	parmInventQty(InventQty  _inventQty = inventQty)
+    {
+        inventQty = _inventQty;
+        return inventQty;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>parmCostingVersion</Name>
+				<Source><![CDATA[
+    public	CostingVersion	parmCostingVersion(CostingVersion  _costingVersion = costingVersion)
+    {
+        costingVersion = _costingVersion;
+        return costingVersion;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getExchangeRate</Name>
+				<Source><![CDATA[
+	// Calculate exchange rate
+    public CurrencyExchangeRate getExchangeRate(CurrencyCode _fromCurrency,TransDate exchangeDate)
+    {
+        ExchangeRateHelper          exchangeRateHelper;
+        Ledger                      ledger = Ledger::find(Ledger::current());
+        exchangeRateHelper = ExchangeRateHelper::construct();
+        exchangeRateHelper.parmLedgerRecId(Ledger::current());
+        exchangeRateHelper.parmFromCurrency(_fromCurrency);
+        exchangeRateHelper.parmToCurrency(ledger.ReportingCurrency);
+        exchangeRateHelper.parmExchangeDate(exchangeDate);
+        exchangeRateHelper.parmExchangeRateTypeRecId(ledger.ReportingCurrencyExchangeRateType);
+       
+        return exchangeRateHelper.getExchangeRate1()/100;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>InventoryRevalCalc</Name>
+				<Source><![CDATA[
+    public InventItemPriceSim InventoryRevalCalc(boolean _skipActivateEmail=true, boolean _createHistoryRecord = true)
+    {
+        real						auTarget,agTarget,pdTarget,ptTarget;
+        SalesQty auOunces,agOunces,pdOunces,ptOunces;
+        Amount						auCost,agCost,pdCost,ptCost,activeUnitCost;
+        Amount						calcAuCost,calcAgCost,calcPdCost,calcPtCost,calcUnitCost;
+        date						lastValuationDate	= dateNull();
+        InventSiteId				siteId;
+        InventDim					invDim;
+        InventItemPrice				inventItemPrice;
+        CurrencyExchangeRate		LastxAuRate,LastxAgRate,LastxPdRate,LastxPtRate, xAuRate, xAgRate, xPdRate, xPtRate;
+        GCEcoResProductParameters	productParameters;
+        ExchangeRateHelper			exchangeRateHelper;
+        Ledger                      ledger = Ledger::find(Ledger::current());
+        GCItemPriceAttributes		itemPriceAttributes,lastPriceAttibutes;
+        InventItemPriceSim			inventItemPriceSim;
+        InventLocation				inventLocation;
+        int							zeroCost = 1;
+       // GCItemActivePriceView     GCItemActivePriceView;
+
+        GCInventTransferLine_EventHandler	metalTarget	=	new GCInventTransferLine_EventHandler();
+        
+            
+        [auTarget,agTarget,ptTarget,pdTarget]	=	metalTarget.getMetalAttributes(itemId);
+       
+        // Metal composition
+        auOunces	=	inventQty*(auTarget/100);//bug Fix -4890
+        agOunces	=	inventQty*(agTarget/100);//bug Fix -4890
+        pdOunces	=	inventQty*(pdTarget/100);//bug Fix -4890
+        ptOunces	=	inventQty*(ptTarget/100);//bug Fix -4890
+
+        // Active metal cost price
+        siteId	=	allSite ? inventSiteId : inventDim.InventSiteId;
+
+        select inventLocation
+            where inventLocation.InventSiteId == siteId
+            && inventLocation.GCInventLocationType == GCInventLocationType::ZeroCost;
+        if (inventLocation)
+        {
+            zeroCost = 0;
+        }
+		/*select firstonly	inventItemPrice
+            order by	ActivationDate desc
+			join		invDim
+            where		inventItemPrice.ItemId		==	itemId
+			&&			inventItemPrice.VersionId	==	costingVersionId
+            &&			invDim.InventSiteId			==	siteId;*/ // commneted 16-04-2020
+           // &&			inventItemPrice.InventDimId	==	invDim.inventDimId;
+
+		//added 04-16-2020
+        /*select firstonly GCItemActivePriceView order by ActivationDate desc
+            where GCItemActivePriceView.ItemId == itemId
+            && GCItemActivePriceView.VersionId == costingVersionId
+            && GCItemActivePriceView.InventSiteId			==	siteId;
+
+
+        if(GCItemActivePriceView.ActivationDate != dateNull())
+        {
+			
+            select  lastPriceAttibutes  order by RecId desc              
+               
+				join inventDi
+                    where lastPriceAttibutes.InventDimId			==	inventDi.InventDimId
+                    && inventDi.InventSiteId == GCItemActivePriceView.InventSiteId
+                     && lastPriceAttibutes.ItemId == itemId
+                    && lastPriceAttibutes.VersionId == costingVersionId;
+                   // && lastPriceAttibutes.RefRecId     == inventItemPrice.RecId
+                   // && lastPriceAttibutes.RefTableId    == inventItemPrice.TableId  ;
+            lastValuationDate	=	lastPriceAttibutes.CalculationDate;
+        }
+		else
+        {
+            lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+		}*/
+        select firstonly	inventItemPrice
+            order by	ActivationDate desc
+            join		invDim
+            where		inventItemPrice.ItemId		==	itemId
+            &&			inventItemPrice.VersionId	==	costingVersionId
+            &&			invDim.InventSiteId			==	siteId;
+        // &&			inventItemPrice.InventDimId	==	invDim.inventDimId;
+
+        if(inventItemPrice.ActivationDate != dateNull())
+        {
+   
+            select firstonly lastPriceAttibutes  order by RecId desc
+                where lastPriceAttibutes.ItemId == itemId
+                    && lastPriceAttibutes.VersionId == costingVersionId
+                    && lastPriceAttibutes.InventDimId			==	inventItemPrice.InventDimId;
+            // && lastPriceAttibutes.RefRecId     == inventItemPrice.RecId
+            // && lastPriceAttibutes.RefTableId    == inventItemPrice.TableId  ;
+            lastValuationDate	=	lastPriceAttibutes.CalculationDate;
+        }
+        else
+        {
+            lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        }       
+        if(lastValuationDate ==dateNull())
+            lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+        productParameters	=	GCEcoResProductParameters::find();
+        //last exchange rate for au
+        LastxAuRate	=	lastPriceAttibutes.RecId == 0 ? this.getExchangeRate(productParameters.GCBatchAttribGold,lastValuationDate) : lastPriceAttibutes.xAuRate;
+       
+
+        //last exchange rate for ag
+        LastxAgRate	=	lastPriceAttibutes.RecId == 0 ? this.getExchangeRate(productParameters.GCBatchAttribSilver,lastValuationDate):lastPriceAttibutes.xAgRate ;
+        
+
+        //last exchange rate for pt
+        LastxPtRate	=	lastPriceAttibutes.RecId == 0 ?this.getExchangeRate(productParameters.GCBatchAttribPlatinum,lastValuationDate): lastPriceAttibutes.xPtRate;
+        //last exchange rate for pd
+        LastxPdRate	=	lastPriceAttibutes.RecId == 0 ?this.getExchangeRate(productParameters.GCBatchAttribPalladium,lastValuationDate):  lastPriceAttibutes.xPdRate;
+        //metal cost calculation
+        auCost	=	auOunces*LastxAuRate;
+        agCost	=	agOunces*LastxAgRate;
+        ptCost	=	ptOunces*LastxptRate;
+        pdCost	=	pdOunces*LastxpdRate;
+            
+        activeUnitCost	=	auCost+agCost+ptCost+pdCost;
+       
+        //Calculated metal cost price
+        productParameters=	GCEcoResProductParameters::find();
+
+		//Calculated metal Rates
+        xAuRate	=	this.getExchangeRate(productParameters.GCBatchAttribGold,calculationDate);			//Bug Fix - 4906
+        xAgRate	=	this.getExchangeRate(productParameters.GCBatchAttribSilver,calculationDate);		//Bug Fix - 4906
+        xPtRate	=	this.getExchangeRate(productParameters.GCBatchAttribPlatinum,calculationDate);		//Bug Fix - 4906
+        xPdRate	=	this.getExchangeRate(productParameters.GCBatchAttribPalladium,calculationDate);		//Bug Fix - 4906
+
+        /*
+        //calculated cost for au
+        calcAuCost	=	auOunces*(this.getExchangeRate(productParameters.GCBatchAttribGold,calculationDate));
+        //calculated cost for ag
+        calcAgCost	=	agOunces*(this.getExchangeRate(productParameters.GCBatchAttribSilver,calculationDate));
+        //calculated cost for pt
+        calcPtCost	=	ptOunces*(this.getExchangeRate(productParameters.GCBatchAttribPlatinum,calculationDate));
+        //calculated cost for pd
+        calcPdCost	=	pdOunces*(this.getExchangeRate(productParameters.GCBatchAttribPalladium,calculationDate));
+        */
+        //calculated cost for au
+        calcAuCost	=	auOunces*xAuRate;
+        //calculated cost for ag
+        calcAgCost	=	agOunces*xAgRate;
+        //calculated cost for pt
+        calcPtCost	=	ptOunces*xPtRate;
+        //calculated cost for pd
+        calcPdCost	=	pdOunces*xPdRate;
+
+        calcUnitCost	=	calcAuCost+calcAgCost+calcPtCost+calcPdCost;
+   
+        //Inserting values to inventItemPriceSim table
+        //select inventItemPriceSim;
+        //ttsbegin;
+        inventItemPriceSim.clear();
+        inventItemPriceSim.ItemId		=	itemId;
+        inventItemPriceSim.VersionId	=	costingVersionId;
+        select firstfast firstonly costingVersion where costingVersion.VersionId	==	costingVersionId;
+        inventItemPriceSim.initFromCostingVersion(costingVersion,siteId);
+		if (allSite)
+        {
+			inventDim.InventSiteId = inventSiteId;
+            inventDim = InventDim::findOrCreate(inventDim);
+            inventItemPriceSim.InventDimId = inventDim.inventDimId;
+		}
+		else
+        {
+            inventItemPriceSim.InventDimId	=	InventDim::findOrCreate(inventDim).inventDimId;
+        }
+        inventItemPriceSim.FromDate		=	DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+        inventItemPriceSim.PriceType	=	CostingVersionPriceType::Cost;
+        if(InventTable::find(itemId).GCProductType == GCProductType::Serialised)
+        {
+            if(auOunces > 0)
+            {
+                inventItemPriceSim.Price		=	this.getExchangeRate('xAu',DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone()));
+            }
+            else if(agOunces > 0)
+            {
+                inventItemPriceSim.Price		=	this.getExchangeRate('xAg',DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone()));
+            }            
+			else if(pdOunces > 0)
+            {
+                inventItemPriceSim.Price		=	this.getExchangeRate('xPd',DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone()));
+            }
+			else if(ptOunces > 0)
+            {
+                inventItemPriceSim.Price		=	this.getExchangeRate('xPt',DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone()));
+            }
+            
+            inventItemPriceSim.Price		=	zeroCost * inventItemPriceSim.Price;	//Bugfix: 9610
+            inventItemPriceSim.PriceUnit	=	1;
+        }
+		else
+        {
+            inventItemPriceSim.Price		=	zeroCost *  calcUnitCost;
+            inventItemPriceSim.PriceUnit	=	agOunces + 	auOunces + ptOunces	+ pdOunces;		//Bug Fix - 4908		// Label = Price quantity
+        }
+        
+        inventItemPriceSim.PriceQty		=	0;		//Label = Charges quantity
+        inventItemPriceSim.UnitID		=	unitId;
+        inventItemPriceSim.GCisManual    = _skipActivateEmail;
+       // inventItemPriceSim.PriceUnit	=	1;
+        //ttscommit;
+
+        if(inventItemPriceSim.validateWrite() )
+        {
+            inventItemPriceSim.insert();
+            // Inserting the calculated values to GCItemPriceAtrributes table
+           // select	itemPriceAttributes;
+            if (_createHistoryRecord)
+            {
+                ttsbegin;
+                itemPriceAttributes.AgOunces			=	agOunces;
+                itemPriceAttributes.AuOunces			=	auOunces;
+                itemPriceAttributes.PtOunces			=	ptOunces;
+                itemPriceAttributes.PdOunces			=	pdOunces;
+                itemPriceAttributes.AuCost				=	auCost;
+                itemPriceAttributes.AgCost				=	agCost;
+                itemPriceAttributes.PtCost				=	ptCost;
+                itemPriceAttributes.PdCost				=	pdCost;
+                itemPriceAttributes.ActiveUnitCost		=	activeUnitCost;
+                itemPriceAttributes.LastValuationDate	=	lastValuationDate;
+                itemPriceAttributes.CalcAgCost			=	calcAgCost;
+                itemPriceAttributes.CalcAuCost			=	calcAuCost;
+                itemPriceAttributes.CalcPtCost			=	calcPtCost;
+                itemPriceAttributes.CalcPdCost			=	calcPdCost;
+                itemPriceAttributes.CalcUnitCost		=	calcUnitCost;
+                itemPriceAttributes.CalculationDate		=	calculationDate;
+                itemPriceAttributes.xAuRate				=	xAuRate;
+                itemPriceAttributes.xAgRate				=	xAgRate;
+                itemPriceAttributes.xPtRate				=	xPtRate;
+                itemPriceAttributes.xPdRate				=	xPdRate;
+                itemPriceAttributes.LastxAgRate			=	LastxAgRate;
+                itemPriceAttributes.LastxAuRate			=	LastxAuRate;
+                itemPriceAttributes.LastxPdRate			=	LastxPdRate;
+                itemPriceAttributes.LastxPtRate			=	LastxPtRate;
+                itemPriceAttributes.ItemId				=	itemId;
+                itemPriceAttributes.VersionId			=	costingVersionId;
+                itemPriceAttributes.InventDimId			=	inventItemPriceSim.InventDimId;
+                itemPriceAttributes.FromDate			=	DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+                itemPriceAttributes.PriceType			=	CostingVersionPriceType::Cost;
+                itemPriceAttributes.RefRecId			=	inventItemPriceSim.RecId;
+                itemPriceAttributes.RefTableId			=	inventItemPriceSim.TableId;
+                itemPriceAttributes.IsEmailTrigger     =	_skipActivateEmail;
+
+                itemPriceAttributes.insert();
+                ttscommit;
+            }
+        }
+        return	inventItemPriceSim;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>calcItemPremiumCost</Name>
+				<Source><![CDATA[
+    public void calcItemPremiumCost(boolean	_allSites, InventSiteId  _inventSiteId ='')
+    {        
+        InventSiteId				siteId;
+        ItemId						premiumId;
+        InventItemPrice				inventItemPrice;        
+        InventItemPriceSim			inventItemPriceSim;
+        InventLocation				inventLocation;
+        boolean						zeroCost = false;
+        InventTable					inventtable;
+        SuppItemTable				suppitemTable;
+        BOMVersion					bomVersion;
+        CostPrice					costPrice;
+        InventSite					inventSiteLocal;
+        GCEcoResProductParameters		gcProductParameters = GCEcoResProductParameters::find();
+        GCEcoResProductNPParameters		npParameters = GCEcoResProductNPParameters::find();
+        InventItemPriceActivationJob	inventItemPriceActivationJob;
+        // Active metal cost price
+        siteId	=	allSite ? inventSiteId : inventDim.InventSiteId;
+
+        
+        while select suppitemTable join inventtable where suppitemTable.SuppItemId == inventtable.ItemId
+            && inventtable.GCProductType == GCProductType::Premium && suppitemTable.Module == ModuleInventCustVend::Cust
+            && suppitemTable.ItemRelation == itemId
+        {
+            premiumId = suppitemTable.SuppItemId;
+            select bomVersion where bomVersion.ItemId == itemId;
+			//bom line cost calculation
+            costPrice += this.createCostCalc(bomVersion.BOMId, bomVersion.inventSiteId(), itemId);
+        }
+   
+        if(_allSites)
+        {
+            while select inventSiteLocal
+                where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+                && inventSiteLocal.SiteId != npParameters.InventSiteId
+                && inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+                && inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+            {
+                inventItemPriceSim = this.InsertInventItemPriceSim(premiumId,inventSiteLocal.SiteId,costPrice);
+                if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+                {
+                    inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+                    inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+                }
+            }
+        }
+		else
+        {
+            inventItemPriceSim = this.InsertInventItemPriceSim(premiumId,_inventSiteId,costPrice);
+            if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+            {
+                inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+                inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+            }
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>createCostCalc</Name>
+				<Source><![CDATA[
+    public CostPrice createCostCalc(BOMId  _bomId, InventSiteId  _inventSiteId, ItemId _FGItemId)
+    {
+        BOM						bom;
+        BOMTable				bomTable;
+        InventTable				bomInventTable;
+        InventDim				inventDimlocal,inventDimCreate;
+        InventItemPrice			inventItemPrice;
+        CostPriceNonMonetary	price;
+        RouteVersion			routeVersion;
+        RouteOpr				routeOpr;
+        RouteCostCategory		routeCostCategory;
+        CostPrice				routeCost;
+        InventModelGroupItem	inventModelGroupItem;
+        InventTableModule		inventTableModule;
+        InventSum				inventSum;
+
+        //|| bomInventTable.GCProductType == GCProductType::None || bomInventTable.GCProductType == GCProductType::FG
+        // added in below by sourav.c.dutta 08032022 BugFix_23136
+        while select bom 
+			join bomInventTable 
+			where bom.BOMId == _bomId 
+			&& bom.ItemId == bomInventTable.ItemId
+            && (bomInventTable.GCProductType == GCProductType::Premium || bomInventTable.GCProductType == GCProductType::Pack
+            || bomInventTable.GCProductType == GCProductType::None || bomInventTable.GCProductType == GCProductType::FG) 
+        {
+            inventDimlocal = bom.inventDim();
+            inventDimCreate.inventSiteId = inventDimlocal.InventSiteId;
+            inventDimCreate = InventDim::findOrCreate(inventDimCreate);
+            
+            select firstonly inventModelGroupItem 
+				where inventModelGroupItem.ItemId == bom.ItemId 
+				&& inventModelGroupItem.ItemDataAreaId   == bom.DataAreaId;
+
+           // price += this.cost(bom.ItemId, inventDimCreate); //PwCBS Block original
+
+            if(inventModelGroupItem.modelGroup().InventModel == InventModel::StdCost)
+            {
+   	            inventItemPrice = InventItemPrice::findCurrent(bom.ItemId,CostingVersionPriceType::Cost,inventDimCreate.inventDimId);
+   	            price += inventItemPrice.Price;
+            }
+            else 
+            {                
+                price += InventTableModule::find(bom.ItemId,ModuleInventPurchSales::Invent).Price;
+            }//PwCBs Open blocked code
+
+        }
+
+        select routeCostCategory 
+			join routeOpr 			
+			join routeVersion
+            where routeCostCategory.CostCategoryId == routeOpr.ProcessCategoryId
+            && routeOpr.RouteRelation == routeVersion.RouteId
+            && routeVersion.ItemId == _FGItemId;
+
+        if(routeOpr.ProcessPerQty !=0)
+        {
+            routeCost =routeCostCategory.CostPrice / routeOpr.ProcessPerQty;
+        }
+
+        return routeCost + price;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>costOld</Name>
+				<Source><![CDATA[
+    public Amount costOld(ItemId _itemId, InventDim _inventDim)	  
+    {
+        InventCostPriceCache    inventCostPriceCache;
+        InventSum				inventSum;
+        Amount					cost, finalCost;
+
+        inventCostPriceCache	= InventCostPriceCache::construct();
+        inventSum.ItemId		= _itemId;
+        inventSum.InventDimId	= _inventDim.inventDimId;
+        
+        cost = inventCostPriceCache.costPricePcs(inventSum, _inventDim);
+        finalCost = (cost == 0) ? InventTableModule::find(_itemId, ModuleInventPurchSales::Invent).Price : cost;
+
+        return finalCost;
+	}
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>cost</Name>
+				<Source><![CDATA[
+    public Amount cost(ItemId _itemId, InventDim _inventDim)
+    {
+        InventSum		inventSum;
+        Amount			cost = 0, finalCost;
+        InventOnhand    inventOnhand;
+        InventDimParm   inventDimParm;
+
+        if (!PdsGlobal::pdsIsCWItem(_itemId))
+        {
+			select firstonly firstfast inventSum 
+				where inventSum.ItemId == _itemId;
+
+			inventDim.InventSiteId = _inventDim.InventSiteId;
+
+			inventDimParm.initFromInventDim(inventDim);
+
+			inventOnHand = InventOnHand::newItemDim(inventSum.ItemId, inventDim, inventDimParm);
+			cost = inventOnHand.costPricePcs();
+			finalCost = (cost == 0) ? InventTableModule::find(_itemId, ModuleInventPurchSales::Invent).Price : cost;
+        }
+
+        return decRound(finalCost, 2);
+	}
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>InsertInventItemPriceSim</Name>
+				<Source><![CDATA[
+    public InventItemPriceSim InsertInventItemPriceSim(ItemId _premiumId, InventSiteId _inventSiteId, CostPrice _costPrice)
+    {
+        InventItemPriceSim			inventItemPriceSim;
+        InventDim					inventDimLocal;
+        InventLocation				inventLocation;
+        boolean						zeroCost;
+
+        select inventLocation
+            where inventLocation.InventSiteId == _inventSiteId
+            && inventLocation.GCInventLocationType == GCInventLocationType::ZeroCost;
+        if (inventLocation)
+        {
+            zeroCost = true;
+        }
+
+        inventItemPriceSim.clear();
+        inventItemPriceSim.ItemId		=	_premiumId;
+        inventItemPriceSim.VersionId	=	costingVersionId;
+        select firstfast firstonly costingVersion where costingVersion.VersionId	==	costingVersionId;
+        inventItemPriceSim.initFromCostingVersion(costingVersion,_inventSiteId);
+
+        inventDimLocal.InventSiteId = _inventSiteId;
+        inventDimLocal = InventDim::findOrCreate(inventDimLocal);
+        inventItemPriceSim.InventDimId = inventDimLocal.inventDimId;
+        
+        inventItemPriceSim.FromDate		=	DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+        inventItemPriceSim.PriceType	=	CostingVersionPriceType::Cost;
+        
+        inventItemPriceSim.Price		=	zeroCost? 0 : _costPrice;
+        inventItemPriceSim.PriceUnit	=	1;
+        inventItemPriceSim.PriceQty		=	0;
+        inventItemPriceSim.UnitID		=	InventTableModule::find(_premiumId,ModuleInventPurchSales::Invent).UnitId;
+        
+        if(inventItemPriceSim.validateWrite())
+        {
+            inventItemPriceSim.insert();
+        }
+        return inventItemPriceSim;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>InventoryRevalCalcforAllSite</Name>
+				<Source><![CDATA[
+    public InventItemPriceSim InventoryRevalCalcforAllSite(boolean _skipActivateEmail=true, boolean _zeroCostSite = false,boolean _createHistoryRecord = true)
+    {
+        real						auTarget,agTarget,pdTarget,ptTarget;
+        SalesQty auOunces,agOunces,pdOunces,ptOunces;
+        Amount						auCost,agCost,pdCost,ptCost,activeUnitCost;
+        Amount						calcAuCost,calcAgCost,calcPdCost,calcPtCost,calcUnitCost;
+        date						lastValuationDate	= dateNull();
+        date						gclastDate = dateNull(), gcStartDate;    /* GC_59519 Add new variable for activationdate*/
+        str                         gcCurrentItem;              /* GC_59519 Add new variable for current process item*/
+        InventSiteId				siteId;
+        InventDim					invDim;
+        InventItemPrice				inventItemPrice;
+        CurrencyExchangeRate		LastxAuRate,LastxAgRate,LastxPdRate,LastxPtRate, xAuRate, xAgRate, xPdRate, xPtRate;
+        GCEcoResProductParameters	productParameters;
+        ExchangeRateHelper			exchangeRateHelper;
+        Ledger                      ledger = Ledger::find(Ledger::current());
+        GCItemPriceAttributes		itemPriceAttributes,lastPriceAttibutes;
+        InventItemPriceSim			inventItemPriceSim;
+        InventLocation				inventLocation;
+        int							zeroCost = 1;
+        InventSite					inventSiteLocal;
+        Price						exchRateXAuToday,exchRateXAgToday,exchRateXPtToday,exchRateXPdToday;
+
+        InventItemPriceActivationJob	inventItemPriceActivationJob;
+        GCEcoResProductParameters		gcProductParameters = GCEcoResProductParameters::find();
+        GCEcoResProductNPParameters		npParameters = GCEcoResProductNPParameters::find();
+
+        GCInventTransferLine_EventHandler	metalTarget	=	new GCInventTransferLine_EventHandler();
+            
+        [auTarget,agTarget,ptTarget,pdTarget]	=	metalTarget.getMetalAttributes(itemId);
+       
+        // Metal composition
+        auOunces	=	inventQty*(auTarget/100);//bug Fix -4890
+        agOunces	=	inventQty*(agTarget/100);//bug Fix -4890
+        pdOunces	=	inventQty*(pdTarget/100);//bug Fix -4890
+        ptOunces	=	inventQty*(ptTarget/100);//bug Fix -4890
+
+        // Active metal cost price
+        //siteId	=	allSite ? inventSiteId : inventDim.InventSiteId;
+        productParameters=	GCEcoResProductParameters::find();
+        /* GC_59519 - comment this out as issue reported due to process over than one day
+        exchRateXAuToday = this.getExchangeRate(productParameters.GCBatchAttribGold,DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()));
+        exchRateXAgToday = this.getExchangeRate(productParameters.GCBatchAttribSilver,DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()));
+        exchRateXPtToday = this.getExchangeRate(productParameters.GCBatchAttribPlatinum,DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()));
+        exchRateXPdToday = this.getExchangeRate(productParameters.GCBatchAttribPalladium,DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()));
+		*/
+        /* GC_59519 - Use calculationDate */
+        exchRateXAuToday = this.getExchangeRate(productParameters.GCBatchAttribGold,calculationDate);
+        exchRateXAgToday = this.getExchangeRate(productParameters.GCBatchAttribSilver,calculationDate);
+        exchRateXPtToday = this.getExchangeRate(productParameters.GCBatchAttribPlatinum,calculationDate);
+        exchRateXPdToday = this.getExchangeRate(productParameters.GCBatchAttribPalladium,calculationDate);
+
+        //Calculated metal Rates
+        xAuRate	=	this.getExchangeRate(productParameters.GCBatchAttribGold,calculationDate);			//Bug Fix - 4906
+        xAgRate	=	this.getExchangeRate(productParameters.GCBatchAttribSilver,calculationDate);		//Bug Fix - 4906
+        xPtRate	=	this.getExchangeRate(productParameters.GCBatchAttribPlatinum,calculationDate);		//Bug Fix - 4906
+        xPdRate	=	this.getExchangeRate(productParameters.GCBatchAttribPalladium,calculationDate);		//Bug Fix - 4906
+
+        //calculated cost for au
+        //calcAuCost	=	auOunces*(this.getExchangeRate(productParameters.GCBatchAttribGold,calculationDate));
+        calcAuCost	=	auOunces* xAuRate;
+        //calculated cost for ag
+        //calcAgCost	=	agOunces*(this.getExchangeRate(productParameters.GCBatchAttribSilver,calculationDate));
+        calcAgCost	=	agOunces * xAgRate;
+        //calculated cost for pt
+        //calcPtCost	=	ptOunces*(this.getExchangeRate(productParameters.GCBatchAttribPlatinum,calculationDate));
+        calcPtCost	=	ptOunces * xPtRate;
+        //calculated cost for pd
+        //calcPdCost	=	pdOunces*(this.getExchangeRate(productParameters.GCBatchAttribPalladium,calculationDate));
+        calcPdCost	=	pdOunces * xPdRate;
+        calcUnitCost	=	calcAuCost+calcAgCost+calcPtCost+calcPdCost;
+
+       	if(_zeroCostSite == false)
+        {
+			while select inventSiteLocal
+				where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+				&& inventSiteLocal.SiteId != npParameters.InventSiteId
+				&& inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+				&& inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+			{
+				//-----
+				//This part is for calculating last activated price value--Start
+				/*select firstonly	inventItemPrice
+					order by	ActivationDate desc
+						join		invDim
+						where		inventItemPrice.ItemId		==	itemId
+						&&			inventItemPrice.VersionId	==	costingVersionId
+						&&			invDim.InventSiteId			==	inventSiteLocal.SiteId;
+				*/
+
+                /* GC_59519 add logic to get latest ActivationDate of InventItemPrice for each item*/
+                gcStartDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()) - 5;
+                if(gclastDate == dateNull() || gcCurrentItem != itemId)
+                {
+                    
+                    select maxof(ActivationDate) from inventItemPrice
+                        where inventItemPrice.ItemId ==	itemId
+                           && inventItemPrice.VersionId	==	costingVersionId
+                           && inventItemPrice.ActivationDate >= gcStartdate;
+                    gclastDate = inventItemPrice.ActivationDate;
+                    gcCurrentItem = inventItemPrice.ItemId;
+                }
+
+                select firstfast firstonly inventItemPrice  /* GC_59519 add firstfast */
+                    //order by ActivationDate desc          /* GC_59519 Commented out */
+					where inventItemPrice.ItemId ==	itemId
+                       && inventItemPrice.VersionId	==	costingVersionId
+                       && inventItemPrice.ActivationDate == gclastDate /* GC_59519 Add condition to check last date */
+                join invDim
+                    where invDim.inventDimId == inventItemPrice.InventDimId
+                       && invDim.InventSiteId ==	inventSiteLocal.SiteId;
+				if(inventItemPrice.ActivationDate != dateNull())
+				{   
+					select firstonly lastPriceAttibutes  order by RecId desc
+					where lastPriceAttibutes.ItemId == itemId
+						&& lastPriceAttibutes.VersionId == costingVersionId
+						&& lastPriceAttibutes.InventDimId			==	inventItemPrice.InventDimId;
+            
+					lastValuationDate	=	lastPriceAttibutes.CalculationDate;
+				}
+				else
+				{
+					lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+				}
+				if(lastValuationDate == dateNull())
+				{
+					lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+				}
+				//last exchange rate for au
+				LastxAuRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXAuToday : lastPriceAttibutes.xAuRate;
+				//last exchange rate for ag
+				LastxAgRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXAgToday : lastPriceAttibutes.xAgRate;
+				//last exchange rate for pt
+				LastxPtRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXPtToday : lastPriceAttibutes.xPtRate;
+				//last exchange rate for pd
+				LastxPdRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXPdToday :  lastPriceAttibutes.xPdRate;
+				//metal cost calculation
+				auCost	=	auOunces * LastxAuRate;
+				agCost	=	agOunces * LastxAgRate;
+				ptCost	=	ptOunces * LastxptRate;
+				pdCost	=	pdOunces * LastxpdRate;            
+				activeUnitCost	=	auCost+agCost+ptCost+pdCost;
+				//This part is for calculating last activated price value--End
+
+				zeroCost = 1;
+				select inventLocation where inventLocation.InventSiteId == inventSiteLocal.siteId
+					&& inventLocation.GCInventLocationType == GCInventLocationType::ZeroCost;
+				if (inventLocation)
+				{
+					zeroCost = 0;
+				}			
+				inventItemPriceSim.clear();
+				inventItemPriceSim.ItemId		=	itemId;
+				inventItemPriceSim.VersionId	=	costingVersionId;
+				select firstfast firstonly costingVersion where costingVersion.VersionId ==	costingVersionId;
+				inventItemPriceSim.initFromCostingVersion(costingVersion,siteId);
+
+				inventDim.InventSiteId = inventSiteLocal.SiteId;
+				inventDim = InventDim::findOrCreate(inventDim);
+				inventItemPriceSim.InventDimId = inventDim.inventDimId;
+
+				inventItemPriceSim.FromDate		=	DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+				inventItemPriceSim.PriceType	=	CostingVersionPriceType::Cost;
+				if(InventTable::find(itemId).GCProductType == GCProductType::Serialised)
+				{
+					if(auOunces > 0)
+					{
+						inventItemPriceSim.Price		=	exchRateXAuToday;
+					}
+					else if(agOunces > 0)
+					{
+						inventItemPriceSim.Price		=	exchRateXAgToday;
+					}
+					else if(pdOunces > 0)
+					{
+                        inventItemPriceSim.Price		=	 exchRateXPdToday;//exchRateXPtToday;
+					}
+					else if(ptOunces > 0)
+					{
+                        inventItemPriceSim.Price		=	exchRateXPtToday; // added 22/Feb-21
+					}      
+                    inventItemPriceSim.Price		=	zeroCost * inventItemPriceSim.Price;	//Bugfix: 9610
+					inventItemPriceSim.PriceUnit	=	1;
+				}
+				else
+				{
+					inventItemPriceSim.Price		=	zeroCost *  calcUnitCost;
+					inventItemPriceSim.PriceUnit	=	agOunces + 	auOunces + ptOunces	+ pdOunces;		//Bug Fix - 4908		// Label = Price quantity
+				}
+        
+				inventItemPriceSim.PriceQty		=	0;		//Label = Charges quantity
+				inventItemPriceSim.UnitID		=	unitId;
+				inventItemPriceSim.GCisManual    = _skipActivateEmail;
+
+				if(inventItemPriceSim.validateWrite())
+				{
+					inventItemPriceSim.insert();
+					if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+					{
+						inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+						inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+					}
+					// Inserting the calculated values to GCItemPriceAtrributes table  
+                    if(_createHistoryRecord)
+                    {
+                        itemPriceAttributes.AgOunces			=	agOunces;
+                        itemPriceAttributes.AuOunces			=	auOunces;
+                        itemPriceAttributes.PtOunces			=	ptOunces;
+                        itemPriceAttributes.PdOunces			=	pdOunces;
+                        itemPriceAttributes.AuCost				=	auCost;
+                        itemPriceAttributes.AgCost				=	agCost;
+                        itemPriceAttributes.PtCost				=	ptCost;
+                        itemPriceAttributes.PdCost				=	pdCost;
+                        itemPriceAttributes.ActiveUnitCost		=	activeUnitCost;
+                        itemPriceAttributes.LastValuationDate	=	lastValuationDate;
+                        itemPriceAttributes.CalcAgCost			=	calcAgCost;
+                        itemPriceAttributes.CalcAuCost			=	calcAuCost;
+                        itemPriceAttributes.CalcPtCost			=	calcPtCost;
+                        itemPriceAttributes.CalcPdCost			=	calcPdCost;
+                        itemPriceAttributes.CalcUnitCost		=	calcUnitCost;
+                        itemPriceAttributes.CalculationDate		=	calculationDate;
+                        itemPriceAttributes.xAuRate				=	xAuRate;
+                        itemPriceAttributes.xAgRate				=	xAgRate;
+                        itemPriceAttributes.xPtRate				=	xPtRate;
+                        itemPriceAttributes.xPdRate				=	xPdRate;
+                        itemPriceAttributes.LastxAgRate			=	LastxAgRate;
+                        itemPriceAttributes.LastxAuRate			=	LastxAuRate;
+                        itemPriceAttributes.LastxPdRate			=	LastxPdRate;
+                        itemPriceAttributes.LastxPtRate			=	LastxPtRate;
+                        itemPriceAttributes.ItemId				=	itemId;
+                        itemPriceAttributes.VersionId			=	costingVersionId;
+                        itemPriceAttributes.InventDimId			=	inventItemPriceSim.InventDimId;
+                        itemPriceAttributes.FromDate			=	DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+                        itemPriceAttributes.PriceType			=	CostingVersionPriceType::Cost;
+                        itemPriceAttributes.RefRecId			=	inventItemPriceSim.RecId;
+                        itemPriceAttributes.RefTableId			=	inventItemPriceSim.TableId;
+                        itemPriceAttributes.IsEmailTrigger     =	_skipActivateEmail;
+
+                        itemPriceAttributes.insert();
+                    }
+				}
+			}
+        }
+		else
+        {
+            while select SiteId, GCZeroCostSite from inventSiteLocal
+                where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+                && inventSiteLocal.SiteId != npParameters.InventSiteId
+                && inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+                && inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+                && inventSiteLocal.GCZeroCostSite == NoYes::No
+            {
+            //-----
+                //This part is for calculating last activated price value--Start
+                /*select firstonly	inventItemPrice
+                    order by	ActivationDate desc
+                        join		invDim
+                        where		inventItemPrice.ItemId		==	itemId
+                        &&			inventItemPrice.VersionId	==	costingVersionId
+                        &&			invDim.InventSiteId			==	inventSiteLocal.SiteId;*/           
+     
+                /* GC_59519 add logic to get latest ActivationDate of InventItemPrice for each item*/
+                gcStartDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()) - 5;
+                if(gclastDate == dateNull() || gcCurrentItem != itemId)
+                {
+                    
+                    select maxof(ActivationDate) from inventItemPrice
+                        where inventItemPrice.ItemId ==	itemId
+                           && inventItemPrice.VersionId	==	costingVersionId
+                           && inventItemPrice.ActivationDate >= gcStartdate;
+                    gclastDate = inventItemPrice.ActivationDate;
+                    gcCurrentItem = inventItemPrice.ItemId;
+                }
+
+                select firstfast firstonly itemId, VersionId, ActivationDate, InventDimId from inventItemPrice  /* GC_59519 add firstfast */
+                    //order by ActivationDate desc          /* GC_59519 Commented out */
+                    where inventItemPrice.ItemId ==	itemId
+                       && inventItemPrice.VersionId	==	costingVersionId
+                       && inventItemPrice.ActivationDate == gclastDate /* GC_59519 Add condition to check last date */
+                join inventDimId, inventSiteId from invDim
+                    where invDim.inventDimId == inventItemPrice.InventDimId
+                       && invDim.InventSiteId ==	inventSiteLocal.SiteId;
+                if(inventItemPrice.ActivationDate != dateNull())
+                {
+                    /*  GC_59519 Commented this out and replaced with using maxof
+                    select firstonly lastPriceAttibutes  order by RecId desc
+                    where lastPriceAttibutes.ItemId == itemId
+                        && lastPriceAttibutes.VersionId == costingVersionId
+                        && lastPriceAttibutes.InventDimId			==	inventItemPrice.InventDimId; */
+                    /*  GC_59519 Above Logic replacement with using maxof */
+                    select ItemId, VersionId, InventDimId, maxof(CalculationDate) from lastPriceAttibutes
+                    where lastPriceAttibutes.ItemId         == itemId
+                        && lastPriceAttibutes.VersionId     == costingVersionId
+                        && lastPriceAttibutes.InventDimId	==	inventItemPrice.InventDimId
+                        && lastPriceAttibutes.CalculationDate >= gcStartDate;
+            
+                    lastValuationDate	=	lastPriceAttibutes.CalculationDate;
+                }
+                else
+                {
+                    lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+                }
+                if(lastValuationDate == dateNull())
+                {
+                    lastValuationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());
+                    }
+                //last exchange rate for au
+                LastxAuRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXAuToday : lastPriceAttibutes.xAuRate;
+                //last exchange rate for ag
+                LastxAgRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXAgToday : lastPriceAttibutes.xAgRate;
+                //last exchange rate for pt
+                LastxPtRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXPtToday : lastPriceAttibutes.xPtRate;
+                //last exchange rate for pd
+                LastxPdRate	=	lastPriceAttibutes.RecId == 0 ? exchRateXPdToday : lastPriceAttibutes.xPdRate;
+                //metal cost calculation
+                auCost	=	auOunces * LastxAuRate;
+                agCost	=	agOunces * LastxAgRate;
+                ptCost	=	ptOunces * LastxptRate;
+                pdCost	=	pdOunces * LastxpdRate;
+                activeUnitCost	=	auCost+agCost+ptCost+pdCost;
+                //This part is for calculating last activated price value--End
+
+                zeroCost = 1;
+                select firstfast firstonly InventSiteId, GCInventLocationType from inventLocation where inventLocation.InventSiteId == inventSiteLocal.siteId /* GC_59519 add firstfast firstOnly */
+                    && inventLocation.GCInventLocationType == GCInventLocationType::ZeroCost;
+                if (inventLocation)
+                {
+                    zeroCost = 0;
+                }
+                inventItemPriceSim.clear();
+                inventItemPriceSim.ItemId		=	itemId;
+                inventItemPriceSim.VersionId	=	costingVersionId;
+                select firstfast firstonly costingVersion where costingVersion.VersionId ==	costingVersionId; /* GC_59519 add firstfast firstOnly */
+                inventItemPriceSim.initFromCostingVersion(costingVersion,siteId);
+
+                inventDim.InventSiteId = inventSiteLocal.SiteId;
+                inventDim = InventDim::findOrCreate(inventDim);
+                inventItemPriceSim.InventDimId = inventDim.inventDimId;
+
+                inventItemPriceSim.FromDate		=	calculationDate; // GC_59519 Commented out - DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+                inventItemPriceSim.PriceType	=	CostingVersionPriceType::Cost;
+                if(InventTable::find(itemId).GCProductType == GCProductType::Serialised)
+                {
+                    if(auOunces > 0)
+                    {
+                        inventItemPriceSim.Price		=	exchRateXAuToday;
+                    }
+                    else if(agOunces > 0)
+                    {
+                        inventItemPriceSim.Price		=	exchRateXAgToday;
+                    }
+                    else if(pdOunces > 0)
+                    {
+                        inventItemPriceSim.Price		=	exchRateXPdToday ;//;
+                    }
+                    else if(ptOunces > 0)
+                    {
+                        inventItemPriceSim.Price		=	exchRateXPtToday;// added 22feb21
+                    }
+                    inventItemPriceSim.Price		=	zeroCost * inventItemPriceSim.Price;	//Bugfix: 9610
+                    inventItemPriceSim.PriceUnit	=	1;
+                }
+                else
+                {
+                    inventItemPriceSim.Price		=	zeroCost *  calcUnitCost;
+                    inventItemPriceSim.PriceUnit	=	agOunces + 	auOunces + ptOunces	+ pdOunces;		//Bug Fix - 4908		// Label = Price quantity
+                }
+        
+                inventItemPriceSim.PriceQty		=	0;		//Label = Charges quantity
+                inventItemPriceSim.UnitID		=	unitId;
+                inventItemPriceSim.GCisManual    = _skipActivateEmail;
+
+                if(inventItemPriceSim.validateWrite())
+                {
+                    inventItemPriceSim.insert();
+                    if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+                    {
+                        inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+                        inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+                        }
+                    // Inserting the calculated values to GCItemPriceAtrributes table
+                    if(_createHistoryRecord)
+                    {
+                        itemPriceAttributes.AgOunces			=	agOunces;
+                        itemPriceAttributes.AuOunces			=	auOunces;
+                        itemPriceAttributes.PtOunces			=	ptOunces;
+                        itemPriceAttributes.PdOunces			=	pdOunces;
+                        itemPriceAttributes.AuCost				=	auCost;
+                        itemPriceAttributes.AgCost				=	agCost;
+                        itemPriceAttributes.PtCost				=	ptCost;
+                        itemPriceAttributes.PdCost				=	pdCost;
+                        itemPriceAttributes.ActiveUnitCost		=	activeUnitCost;
+                        itemPriceAttributes.LastValuationDate	=	lastValuationDate;
+                        itemPriceAttributes.CalcAgCost			=	calcAgCost;
+                        itemPriceAttributes.CalcAuCost			=	calcAuCost;
+                        itemPriceAttributes.CalcPtCost			=	calcPtCost;
+                        itemPriceAttributes.CalcPdCost			=	calcPdCost;
+                        itemPriceAttributes.CalcUnitCost		=	calcUnitCost;
+                        itemPriceAttributes.CalculationDate		=	calculationDate;
+                        itemPriceAttributes.xAuRate				=	xAuRate;
+                        itemPriceAttributes.xAgRate				=	xAgRate;
+                        itemPriceAttributes.xPtRate				=	xPtRate;
+                        itemPriceAttributes.xPdRate				=	xPdRate;
+                        itemPriceAttributes.LastxAgRate			=	LastxAgRate;
+                        itemPriceAttributes.LastxAuRate			=	LastxAuRate;
+                        itemPriceAttributes.LastxPdRate			=	LastxPdRate;
+                        itemPriceAttributes.LastxPtRate			=	LastxPtRate;
+                        itemPriceAttributes.ItemId				=	itemId;
+                        itemPriceAttributes.VersionId			=	costingVersionId;
+                        itemPriceAttributes.InventDimId			=	inventItemPriceSim.InventDimId;
+                        itemPriceAttributes.FromDate			=	DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone());
+                        itemPriceAttributes.PriceType			=	CostingVersionPriceType::Cost;
+                        itemPriceAttributes.RefRecId			=	inventItemPriceSim.RecId;
+                        itemPriceAttributes.RefTableId			=	inventItemPriceSim.TableId;
+                        itemPriceAttributes.IsEmailTrigger     =	_skipActivateEmail;
+
+                        itemPriceAttributes.insert();
+                    }
+                }
+            }
+		}
+        
+        return	inventItemPriceSim;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>calcFGBlankItemPremiumCost</Name>
+				<Source><![CDATA[
+//Add PwCBS
+    public void calcFGBlankItemPremiumCost(boolean	_allSites, InventSiteId  _inventSiteId ='')
+    {
+        InventSiteId				siteId;
+        ItemId						premiumId;
+        InventItemPrice				inventItemPrice;
+        InventItemPriceSim			inventItemPriceSim;
+        InventLocation				inventLocation;
+        boolean						zeroCost = false;
+        InventTable					inventtable;
+        SuppItemTable				suppitemTable;
+        BOMVersion					bomVersion;
+        CostPrice					costPrice;
+        InventSite					inventSiteLocal;
+        GCEcoResProductParameters		gcProductParameters = GCEcoResProductParameters::find();
+        GCEcoResProductNPParameters		npParameters = GCEcoResProductNPParameters::find();
+        InventItemPriceActivationJob	inventItemPriceActivationJob;
+        // Active metal cost price
+        siteId	=	allSite ? inventSiteId : inventDim.InventSiteId;
+
+        
+        while select suppitemTable join inventtable where suppitemTable.SuppItemId == inventtable.ItemId
+            && inventtable.GCProductType == GCProductType::Premium && suppitemTable.Module == ModuleInventCustVend::Cust
+            && suppitemTable.ItemRelation == itemId
+        {
+            premiumId = suppitemTable.SuppItemId;
+            select bomVersion where bomVersion.ItemId == itemId;
+            //bom line cost calculation
+            costPrice += this.createCostCalc(bomVersion.BOMId, bomVersion.inventSiteId(), itemId);
+        }
+   
+        if(_allSites)
+        {
+            while select inventSiteLocal
+                where inventSiteLocal.SiteId != gcProductParameters.UnallocatedInventSiteId
+                && inventSiteLocal.SiteId != npParameters.InventSiteId
+                && inventSiteLocal.SiteId != gcProductParameters.MetalCreditsInventSiteId
+                && inventSiteLocal.SiteId != gcProductParameters.ServiceInventSiteId
+            {
+                inventItemPriceSim = this.InsertInventItemPriceSim(premiumId,inventSiteLocal.SiteId,costPrice);
+                //if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+                //{
+                //    inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+                //    inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+                //}
+            }
+        }
+        else
+        {
+            inventItemPriceSim = this.InsertInventItemPriceSim(premiumId,_inventSiteId,costPrice);
+            //if (inventItemPriceSim	&&	inventItemPriceSim.allowActivation(false))
+            //{
+            //    inventItemPriceActivationJob  = InventItemPriceActivationJob::construct();
+            //    inventItemPriceActivationJob.activateOneInventItemPriceSim(inventItemPriceSim);
+            //}
+        }
+    }
+    //PwCBS END
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

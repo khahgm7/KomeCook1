@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Class_CaseAssociationProvider_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(classStr(CaseAssociationProvider))]
+final class Kome_Class_CaseAssociationProvider_Extension
+{
+}
+
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>getCase</Name>
+				<Source><![CDATA[
+    protected CaseDetailBase getCase(RefRecId _caseRecId, boolean _forUpdate = false)
+    {
+        return CaseDetailBase::findRec(_caseRecId, _forUpdate);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getLinkedName</Name>
+				<Source><![CDATA[
+    public CaseLinkedName getLinkedName(RefRecId _parentRecId)
+    {
+        var name = next getLinkedName(_parentRecId);
+   
+        if(!strLen(name))
+            name = this.getCase(_parentRecId).(this.getFieldToDisplay());
+
+        return name;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getFieldToDisplay</Name>
+				<Source><![CDATA[
+    private FieldId getFieldToDisplay()
+    {
+        return fieldNum(CaseDetailBase, Description);
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>
