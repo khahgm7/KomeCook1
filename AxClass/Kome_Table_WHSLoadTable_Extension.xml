@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Table_WHSLoadTable_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(tableStr(WHSLoadTable))]
+final class Kome_Table_WHSLoadTable_Extension
+{
+    //public static void updateLoadStatus(WHSLoadId _loadId, WHSLoadStatus _loadStatus, boolean _disableCache)
+    //{
+    //    WHSLoadStatus loadStatus = WHSLoadTable::getLoadStatusFromAllWorkStatus(_loadId, _loadStatus);
+
+    //    next updateLoadStatus(_loadId, loadStatus, _disableCache);
+    //}
+
+    //protected static WHSLoadStatus getLoadStatusFromAllWorkStatus(WHSLoadId _loadId, WHSLoadStatus _loadStatus, boolean _showInfo = true)
+    //{
+    //    boolean useNewWHSLoadStatus = true; // Please make a new feature here to control this behaviour
+    //    WHSLoadStatus newLoadStatus = _loadStatus;
+
+    //    if(newLoadStatus != WHSLoadStatus::InProcess || !useNewWHSLoadStatus)
+    //        return newLoadStatus;
+
+    //    if(!WHSLoadTable::hasAnyOpenWorkLine(_loadId))
+    //    {
+    //        newLoadStatus = WHSLoadStatus::Shipped;
+
+    //        if(_showInfo)
+    //            Info(
+    //                strFmt(
+    //                    "Load %1 is updated to %2 because there is no longer any open work lines for it."
+    //                    , _loadId
+    //                    , new DictEnum(enumNum(WHSLoadStatus)).value2Label(enum2int(_loadStatus))
+    //                )
+    //            );
+    //    }
+
+
+    //    return newLoadStatus;
+    //}
+
+    //protected static boolean hasAnyOpenWorkLine(WHSLoadId _loadId)
+    //{
+    //    WHSWorkTable workTable;
+    //    WHSWorkLine workLine;
+
+    //    select firstonly workLine
+    //        where (workLine.WorkStatus != WHSWorkStatus::Closed
+    //            && workLine.WorkStatus != WHSWorkStatus::Cancelled
+    //            && workLine.WorkStatus != WHSWorkStatus::Skipped)
+    //        exists join workTable
+    //            where workTable.WorkId == workLine.WorkId
+    //                && workTable.LoadId == _loadId;
+
+    //    return workLine.RecId != 0;
+    //}
+
+}
+]]></Declaration>
+		<Methods />
+	</SourceCode>
+</AxClass>

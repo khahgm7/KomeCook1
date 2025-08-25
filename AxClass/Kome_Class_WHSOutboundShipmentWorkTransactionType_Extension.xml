@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Class_WHSOutboundShipmentWorkTransactionType_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(classStr(WHSOutboundShipmentWorkTransactionType))]
+final class Kome_Class_WHSOutboundShipmentWorkTransactionType_Extension
+{
+    private boolean loadLineQtyDecreased;
+
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>cancelWork</Name>
+				<Source><![CDATA[
+    public void cancelWork(WHSWorkTable _workTable, boolean _cancellingProductReceipt)
+    {
+        next cancelWork(_workTable, _cancellingProductReceipt);
+
+        this.cancelWorkDecreaseAllQty(_workTable.WorkId);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>cancelWorkDecreaseAllQty</Name>
+				<Source><![CDATA[
+    protected void cancelWorkDecreaseAllQty(WHSWorkid _workId, boolean _showInfo = true)
+    {
+        boolean useCancelWorkDecreaseAllQtyFeature = true; // Please make a new feature here to contol this behaviour
+        
+        if(!useCancelWorkDecreaseAllQtyFeature || !this.parmDecrementLoadLineWorkCreatedQty())
+            return;
+
+        WHSWorkLineLoadLineDetailsEnumerator enumerator = WHSWorkLineLoadLineDetailsEnumerator::newFromWorkId(_workId);
+
+        while(enumerator.moveNext())
+            this.doCancelWorkDecreaseAllQty(enumerator.currentLoadLine(), enumerator.currentInventQtyWork());
+
+        if(_showInfo && loadLineQtyDecreased)
+            Info("Upon work line cancellation, related load lines have their quantities decreased.");
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>doCancelWorkDecreaseAllQty</Name>
+				<Source><![CDATA[
+    protected void doCancelWorkDecreaseAllQty(WHSLoadLine _loadLine, InventQty _decreaseQty)
+    {
+        WHSLoadLine             loadLine = _loadLine;
+        InventQty               qty = _decreaseQty;
+        UnitOfMeasureSymbol     inventHandlingUOM = WHSCatchWeightHelper::inventHandlingUnitId(loadLine.ItemId);
+        UnitOfMeasureSymbol     loadLineUOM = loadLine.UOM;
+
+        void SetQtyField(FieldId _fieldId, boolean _requireUOMConvert = false)
+        {
+            Qty deductQty = 
+                (_requireUOMConvert && (inventHandlingUOM != loadLineUOM)) ?
+                EcoResProductUnitConverter::convertGivenUnitSymbolsForReleasedProduct(
+                    loadLine.ItemId
+                    , loadLine.InventDimId
+                    , qty
+                    , inventHandlingUOM
+                    , loadLineUOM
+                    , NoYes::No
+                    , NoYes::No
+                ) :
+                qty;
+
+            if(deductQty >= loadLine.(_fieldId))
+                loadLine.(_fieldId) = 0;
+            else 
+                loadLine.(_fieldId) -= deductQty;
+        }
+        
+        if(!loadLine || !qty)
+            return;        
+        
+        loadLine.selectForUpdate(true);
+
+        SetQtyField(fieldNum(WHSLoadLine, InventQty));
+        SetQtyField(fieldNum(WHSLoadLine, Qty), true);
+        SetQtyField(fieldNum(WHSLoadLine, QtyLeftToStructure), true);
+
+        loadLine.update();
+
+        loadLineQtyDecreased = true;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

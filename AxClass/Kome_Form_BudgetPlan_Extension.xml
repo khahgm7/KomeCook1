@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Form_BudgetPlan_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(formStr(BudgetPlan))]
+internal final class Kome_Form_BudgetPlan_Extension
+{
+    
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>resetGrid</Name>
+				<Source><![CDATA[
+    public void resetGrid()
+    {
+        next resetGrid();
+
+        this.setCustomFieldVisibility();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setCustomFieldVisibility</Name>
+				<Source><![CDATA[
+    protected void setCustomFieldVisibility()
+    {
+        SetEnumerator fields = this.getCustomFieldSet().getEnumerator();
+
+        while(fields.moveNext())
+            this.setFieldVisibility(fields.current());
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getCustomFieldSet</Name>
+				<Source><![CDATA[
+    protected Set getCustomFieldSet()
+    {
+        Set ret = new Set(Types::String);
+
+        ret.add(formControlStr(BudgetPlan, BudgetPlanLineActiveView_CustomField1));
+
+        return ret;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setFieldVisibility</Name>
+				<Source><![CDATA[
+    protected void setFieldVisibility(str _control, boolean _visible = true)
+    {
+        this.control(this.controlId(_control)).visible(_visible);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>BudgetPlanLineActiveView_Post_modifiedField</Name>
+				<Source><![CDATA[
+    //[FormControlEventHandler(formControlStr(BudgetPlan, DimensionValue1), FormControlEventType::Modified)]
+    //public static void DimensionValue1_OnModified(FormControl sender, FormControlEventArgs e)
+    //{
+    //    FormStringControl control = sender as FormStringControl;
+
+    //    if(control.valueStr())
+    //    {
+    //        FormStringControl mainAccountNameControl = control.formRun().control(
+    //            control.formRun().controlId(formControlStr(BudgetPlan, Kome_Field1))
+    //        ) as FormStringControl;
+
+    //        mainAccountNameControl.text(MainAccount::findByMainAccountId(control.valueStr()).localizedName());            
+    //    }
+    //}
+
+    [PostHandlerFor(tableStr(BudgetPlanLineActiveView), tableMethodStr(BudgetPlanLineActiveView, modifiedField))]
+    public static void BudgetPlanLineActiveView_Post_modifiedField(XppPrePostArgs args)
+    {
+        BudgetPlanLineActiveView    common = args.getThis() as BudgetPlanLineActiveView;
+        FormDataSource              ds = FormDataUtil::getFormDataSource(common);
+        Set                         modifiedFieldList;
+        Map                         mapFieldList;
+
+        /** Functions **/
+        void InitModifiedFieldList()
+        {
+            modifiedFieldList = new Set(Types::Integer);
+            
+            modifiedFieldList.add(fieldNum(BudgetPlanLineActiveView, DimensionValue1));
+        }
+
+        void InitMapFieldList()
+        {
+            mapFieldList = new Map(Types::Integer, Types::Integer);
+
+            mapFieldList.insert(
+                fieldNum(BudgetPlanLineActiveView, DimensionValue1)
+                , fieldNum(BudgetPlanLineActiveView, CustomField1)
+            );
+        }
+
+        void SetFieldValue(int _fieldId, anytype _value)
+        {
+            common.(_fieldId) = _value;
+        }
+
+        boolean FieldModified(int _fieldId)
+        {
+            return common.(_fieldId) != common.orig().(_fieldId);
+        }
+
+        /** Code **/
+
+        InitModifiedFieldList();
+        InitMapFieldList();
+
+        SetEnumerator se = modifiedFieldList.getEnumerator();
+
+        while(se.moveNext())
+        {
+            FieldId fromField = se.current();
+            FieldId toField = mapFieldList.lookup(fromField);
+
+            if(!FieldModified(fromField))
+                continue;
+            
+            switch(fromField)
+            {
+                case fieldNum(BudgetPlanLineActiveView, DimensionValue1):
+                    SetFieldValue(
+                        toField
+                        , MainAccount::findByMainAccountId(common.DimensionValue1).localizedName()
+                    );
+                    break;
+            }
+        }
+
+        if(ds)
+        {
+            ds.reread();
+            ds.refresh();
+        }
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

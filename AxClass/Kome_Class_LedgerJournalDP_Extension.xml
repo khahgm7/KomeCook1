@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Class_LedgerJournalDP_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(classStr(LedgerJournalDP))]
+final class Kome_Class_LedgerJournalDP_Extension
+{
+    private LedgerJournalTmp ledgerJournalTmpOrig;
+    private LedgerJournalTmp ledgerJournalTmpBuffer;
+
+}
+
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>processReport</Name>
+				<Source><![CDATA[
+    /*
+    Ideally, I think a better way to intervene into the way that the data is inserted
+    is to alter the query that is used to get the data.
+    By that, we could have been able to wrapping the method this.query().
+    Yet, this DP is a bit tricky that after getting the query from this.query(),
+    it alters the query a bit. That means any extensions made by CoC this.query()
+    will likely be removed/modified.
+
+    Hence, I am wrapping processReport().    
+    */
+    public void processReport()
+    {
+        next processReport();
+
+        this.repopulateLedgerJournalTmpWithSorting();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>repopulateLedgerJournalTmpWithSorting</Name>
+				<Source><![CDATA[
+    private void repopulateLedgerJournalTmpWithSorting()
+    {
+        ledgerJournalTmpOrig = this.getLedgerJournalTmp();
+        
+        this.takeOwnershipOfTempTable(ledgerJournalTmpBuffer);
+        
+        this.populateBufferTable();
+        this.updateSortingBufferTable();
+        this.deleteOrigTable();
+        this.populateOrigTable();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>populateBufferTable</Name>
+				<Source><![CDATA[
+    private void populateBufferTable()
+    {
+        while select ledgerJournalTmpOrig
+        {
+            ledgerJournalTmpBuffer.clear();
+            buf2Buf(ledgerJournalTmp, ledgerJournalTmpBuffer);
+            ledgerJournalTmpBuffer.insert();
+        }
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>deleteOrigTable</Name>
+				<Source><![CDATA[
+    private void deleteOrigTable()
+    {
+        delete_from ledgerJournalTmpOrig;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>updateSortingBufferTable</Name>
+				<Source><![CDATA[
+    private void updateSortingBufferTable()
+    {
+        LedgerJournalTrans localTrans;
+
+        update_recordset ledgerJournalTmpBuffer
+            setting LineNum = localTrans.LineNum
+            join localTrans
+                where localTrans.JournalNum == ledgerJournalTmpBuffer.JournalNum
+                    && localTrans.Voucher == ledgerJournalTmpBuffer.Voucher
+                    && localTrans.TransDate == ledgerJournalTmpBuffer.TransDate
+                    && localTrans.LedgerDimension == ledgerJournalTmpBuffer.LedgerDimension
+                    && localTrans.OffsetLedgerDimension == ledgerJournalTmpBuffer.OffsetLedgerDimension
+                    && localTrans.AmountCurCredit == ledgerJournalTmpBuffer.TotalAmountSumCredit
+                    && localTrans.AmountCurDebit == ledgerJournalTmpBuffer.TotalAmountSumDebit
+        ;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>populateOrigTable</Name>
+				<Source><![CDATA[
+    private void populateOrigTable()
+    {
+        while select ledgerJournalTmpBuffer
+            order by ledgerJournalTmpBuffer.JournalNum asc, ledgerJournalTmpBuffer.LineNum asc
+        {
+            ledgerJournalTmp.clear();
+            buf2Buf(ledgerJournalTmpBuffer, ledgerJournalTmp);
+            ledgerJournalTmp.insert();
+        }
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

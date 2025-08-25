@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Form_CustGroup_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(formStr(CustGroup))]
+final class Kome_Form_CustGroup_Extension
+{
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>docCursor</Name>
+				<Source><![CDATA[
+    public Common docCursor()
+    {
+        Common ret = next docCursor();
+
+        return this.setNewDocCursor(ret);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setNewDocCursor</Name>
+				<Source><![CDATA[
+    private Common setNewDocCursor(Common _common)
+    {
+        boolean useNewDocCursor = true; // Please create a feature or conditions here to control this behaviour;
+
+        if(!useNewDocCursor)
+            return _common;
+
+        // Put the very datasource of the form that the DocuView form needs to see here
+        return this.dataSource(formDataSourceStr(CustGroup, CustGroup)).cursor();
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Class_Bank_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(classStr(Bank))]
+final class Kome_Class_Bank_Extension
+{
+    private boolean isBankAccountSkipValidationFeatureEnabled = true; // Please compose a class implementing IFeatureMetata to make a new feature here
+    private boolean clearWarnings = true;
+    private boolean bankAccountSkipValidation;
+
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>shouldSkipBankAccountValidation</Name>
+				<Source><![CDATA[
+    protected boolean shouldSkipBankAccountValidation()
+    {
+        return isBankAccountSkipValidationFeatureEnabled && bankAccountSkipValidation;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>shouldClearWarnings</Name>
+				<Source><![CDATA[
+    protected boolean shouldClearWarnings()
+    {
+        return clearWarnings;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>construct</Name>
+				<Source><![CDATA[
+    public static Bank construct(LogisticsAddressCountryRegionISOCode _bankLocationISOCode)
+    {
+        Bank instance = next construct(_bankLocationISOCode);
+        
+        instance.checkShouldSkipBankAccountValidation(_bankLocationISOCode);
+
+        return instance;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>checkShouldSkipBankAccountValidation</Name>
+				<Source><![CDATA[
+    protected void checkShouldSkipBankAccountValidation(LogisticsAddressCountryRegionISOCode _bankLocationISOCode)
+    {
+        bankAccountSkipValidation = this.isCountryRegionIncludedInSkipList(_bankLocationISOCode);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>isCountryRegionIncludedInSkipList</Name>
+				<Source><![CDATA[
+    private boolean isCountryRegionIncludedInSkipList(LogisticsAddressCountryRegionISOCode _bankLocationISOCode)
+    {
+        #ISOCountryRegionCodes
+
+        Set set = new Set(Types::String);
+
+        set.add(#isoCA);
+        set.add(#isoUS);
+
+        return set.in(_bankLocationISOCode);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>Bank_CA_Post_checkBankAccount</Name>
+				<Source><![CDATA[
+    /// <summary>
+    /// A better approach is to hook entension code to canCheck* methods. For example, Bank_CA.canCheckBankRegistrationNum().
+    /// Yet, not all classes (extending Bank) do have this method. Hence, we hook our code to the checking method instead so I can make on extension for all.
+    /// </summary>
+    /// <param name="args"></param>
+    [
+        PostHandlerFor(classStr(Bank_CA), methodStr(Bank_CA, checkBankAccount))
+        , PostHandlerFor(classStr(Bank_US), methodStr(Bank_US, checkBankAccount))
+    ]
+    public static void Bank_CA_Post_checkBankAccount(XppPrePostArgs args)
+    {
+        Bank::postCheckingMethod(args);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>postCheckingMethod</Name>
+				<Source><![CDATA[
+    public static void postCheckingMethod(XppPrePostArgs args)
+    {
+        Object bankClass = args.getThis();
+        boolean shouldSkipBankAccountValidation;
+
+        SysDictClass dc = new SysDictClass(classIdGet(bankClass));
+
+        if(dc.hasObjectMethod(methodStr(Bank, shouldSkipBankAccountValidation)))
+            shouldSkipBankAccountValidation = dc.callObject(methodStr(Bank, shouldSkipBankAccountValidation), bankClass);
+
+        if(shouldSkipBankAccountValidation)
+            args.setReturnValue(true);
+
+        if(dc.hasObjectMethod(methodStr(Bank, shouldClearWarnings)) && dc.callObject(methodStr(Bank, shouldClearWarnings), bankClass))
+            infolog.cut();
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

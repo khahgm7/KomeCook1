@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_ViewAnalysis</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+internal final class Kome_ViewAnalysis
+{
+    TableId viewId = tableNum(TrvExprProjectAccountingDistributionView);
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>main</Name>
+				<Source><![CDATA[
+    public static void main(Args _args)
+    {
+        Kome_ViewAnalysis instance = new Kome_ViewAnalysis();
+        instance.process();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>process</Name>
+				<Source><![CDATA[
+    private void process()
+    {
+        DictView dv = new DictView(viewId);
+
+        for(Counter i = 1; i <= dv.datasourceCnt(); i++)
+        {
+            Info(strFmt("%1 - %2", dv.datasourceTableId(i), tableId2Name(dv.datasourceTableId(i))));
+        }
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

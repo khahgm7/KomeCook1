@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Table_LedgerTransModuleTmp_Extension</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+[ExtensionOf(tableStr(LedgerTransModuleTmp))]
+final class Kome_Table_LedgerTransModuleTmp_Extension
+{
+}
+
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>checkText</Name>
+				<Source><![CDATA[
+    public display str checkText()
+    {
+        return
+            strLen(this.TransText) > 0 ?
+            "Max" :
+            "Kome"
+        ;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>

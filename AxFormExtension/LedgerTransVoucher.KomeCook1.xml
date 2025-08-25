@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxFormExtension xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="Microsoft.Dynamics.AX.Metadata.V6">
+	<Name>LedgerTransVoucher.KomeCook1</Name>
+	<ControlModifications />
+	<Controls>
+		<AxFormExtensionControl xmlns="">
+			<Name>FormExtensionControlire0ba101</Name>
+			<FormControl xmlns=""
+				i:type="AxFormStringControl">
+				<Name>ReasonTableRef_ReasonComment</Name>
+				<Type>String</Type>
+				<FormControlExtension
+					i:nil="true" />
+				<DataField>ReasonComment</DataField>
+				<DataSource>ReasonTableRef</DataSource>
+			</FormControl>
+			<Parent>OverviewGrid</Parent>
+			<PositionType>AfterItem</PositionType>
+			<PreviousSibling>LedgerTrans_TransDate</PreviousSibling>
+		</AxFormExtensionControl>
+	</Controls>
+	<DataSourceModifications />
+	<DataSourceReferences />
+	<DataSources />
+	<Parts />
+	<PropertyModifications />
+</AxFormExtension>

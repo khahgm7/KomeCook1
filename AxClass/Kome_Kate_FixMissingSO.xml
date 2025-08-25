@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AxClass xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+	<Name>Kome_Kate_FixMissingSO</Name>
+	<SourceCode>
+		<Declaration><![CDATA[
+public class Kome_Kate_FixMissingSO
+{
+    SetEnumerator   orders;
+    SalesId         salesId;
+
+}
+]]></Declaration>
+		<Methods>
+			<Method>
+				<Name>main</Name>
+				<Source><![CDATA[
+    public static void main(Args _args)
+    {
+        Kome_Kate_FixMissingSO instance = new Kome_Kate_FixMissingSO();
+        instance.process();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>process</Name>
+				<Source><![CDATA[
+    protected void process()
+    {
+        this.setGlobals();
+        this.doProcess();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setGlobals</Name>
+				<Source><![CDATA[
+    protected void setGlobals()
+    {
+        this.setOrders();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setOrders</Name>
+				<Source><![CDATA[
+    protected void setOrders()
+    {
+        Set set = new Set(Types::String);
+
+        set.add("000715");
+        set.add("000716");
+        set.add("000717");
+
+        orders = set.getEnumerator();
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>doProcess</Name>
+				<Source><![CDATA[
+    protected void doProcess()
+    {
+        setPrefix("Processing orders");
+
+        ttsbegin;
+
+        try
+        {
+            while(orders.moveNext())
+            {
+                salesId = orders.current();
+
+                if(!this.validateOrder())
+                    continue;
+
+                this.createOrder();
+            }
+        }
+        catch
+        {
+            exceptionTextFallThrough();
+        }
+
+        ttscommit;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>validateOrder</Name>
+				<Source><![CDATA[
+    private boolean validateOrder()
+    {
+        boolean ret = true;
+        
+        SalesTable salesTable = SalesTable::find(salesId);
+
+        if(salesTable)
+            ret = checkFailed(strFmt("Sales order %1 already existed.", salesId));
+
+        return ret;
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>createOrder</Name>
+				<Source><![CDATA[
+    protected void createOrder()
+    {
+        SalesLine   salesLine = this.getFirstSalesLine();
+        SalesTable  salesTable;
+
+        salesTable.initValue();
+
+        this.setField(salesTable, fieldNum(SalesTable, SalesId), salesId);
+        this.setField(salesTable, fieldNum(SalesTable, CustAccount), salesLine.CustAccount);
+
+        salesTable.insert();
+        salesTable.updateBackStatus();
+
+        if(salesTable.RecId)
+            Info(strFmt("Re-created sales order %1. Status set to %2.", salesId));
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>setField</Name>
+				<Source><![CDATA[
+    protected void setField(SalesTable _buffer, FieldId _fieldId, anytype _value)
+    {
+        _buffer.(_fieldId) = _value;
+        _buffer.modifiedField(_fieldId);
+    }
+
+]]></Source>
+			</Method>
+			<Method>
+				<Name>getFirstSalesLine</Name>
+				<Source><![CDATA[
+    private SalesLine getFirstSalesLine()
+    {
+        SalesLine salesLine;
+
+        select firstonly salesLine
+            where salesLine.SalesId == salesId;
+
+        return salesLine;
+    }
+
+]]></Source>
+			</Method>
+		</Methods>
+	</SourceCode>
+</AxClass>
